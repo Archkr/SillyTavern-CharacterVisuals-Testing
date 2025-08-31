@@ -2,7 +2,7 @@ import { extension_settings, getContext } from "../../../extensions.js";
 import { saveSettingsDebounced, event_types, eventSource } from "../../../../script.js";
 import { executeSlashCommandsOnChatInput } from "../../../slash-commands.js";
 
-const extensionName = "SillyTavern-CostumeSwitch-Testing";
+const extensionName = "SillyTavern-CostumeSwitch";
 const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
 
 const DEFAULT_ATTRIBUTION_VERBS = ["acknowledged", "added", "admitted", "advised", "affirmed", "agreed", "announced", "answered", "argued", "asked", "barked", "began", "bellowed", "blurted", "boasted", "bragged", "called", "chirped", "commanded", "commented", "complained", "conceded", "concluded", "confessed", "confirmed", "continued", "countered", "cried", "croaked", "crowed", "declared", "decreed", "demanded", "denied", "drawled", "echoed", "emphasized", "enquired", "enthused", "estimated", "exclaimed", "explained", "gasped", "insisted", "instructed", "interjected", "interrupted", "joked", "lamented", "lied", "maintained", "moaned", "mumbled", "murmured", "mused", "muttered", "nagged", "nodded", "noted", "objected", "offered", "ordered", "perked up", "pleaded", "prayed", "predicted", "proclaimed", "promised", "proposed", "protested", "queried", "questioned", "quipped", "rambled", "reasoned", "reassured", "recited", "rejoined", "remarked", "repeated", "replied", "responded", "retorted", "roared", "said", "scolded", "scoffed", "screamed", "shouted", "sighed", "snapped", "snarled", "spoke", "stammered", "stated", "stuttered", "suggested", "surmised", "tapped", "threatened", "turned", "urged", "vowed", "wailed", "warned", "whimpered", "whispered", "wondered", "yelled"];
@@ -25,11 +25,11 @@ const PROFILE_DEFAULTS = {
     detectAttribution: true,
     detectAction: true,
     detectVocative: true,
-
     detectPossessive: true,
     detectGeneral: false,
     attributionVerbs: [...DEFAULT_ATTRIBUTION_VERBS],
     actionVerbs: [...DEFAULT_ACTION_VERBS],
+    detectionBias: 0,
 };
 
 // Top-level settings object which contains all profiles.
@@ -84,7 +84,32 @@ function getQuoteRanges(s) { const q=/"|\u201C|\u201D/g,pos=[],ranges=[];let m;w
 function isIndexInsideQuotesRanges(ranges,idx){for(const[a,b]of ranges)if(idx>a&&idx<b)return!0;return!1}
 function findMatches(combined,regex,quoteRanges,searchInsideQuotes=!1){if(!combined||!regex)return[];const flags=regex.flags.includes("g")?regex.flags:regex.flags+"g",re=new RegExp(regex.source,flags),results=[];let m;for(; (m=re.exec(combined))!==null;){const idx=m.index||0;(searchInsideQuotes||!isIndexInsideQuotesRanges(quoteRanges,idx))&&results.push({match:m[0],groups:m.slice(1),index:idx}),re.lastIndex===m.index&&re.lastIndex++}return results}
 function findAllMatches(combined,regexes,settings,quoteRanges){const allMatches=[],{speakerRegex,attributionRegex,actionRegex,vocativeRegex,nameRegex}=regexes,priorities={speaker:5,attribution:4,action:3,vocative:2,possessive:1,name:0};if(speakerRegex&&findMatches(combined,speakerRegex,quoteRanges).forEach(m=>{const name=m.groups?.[0]?.trim();name&&allMatches.push({name,matchKind:"speaker",matchIndex:m.index,priority:priorities.speaker})}),settings.detectAttribution&&attributionRegex&&findMatches(combined,attributionRegex,quoteRanges).forEach(m=>{const name=m.groups?.find(g=>g)?.trim();name&&allMatches.push({name,matchKind:"attribution",matchIndex:m.index,priority:priorities.attribution})}),settings.detectAction&&actionRegex&&findMatches(combined,actionRegex,quoteRanges).forEach(m=>{const name=m.groups?.find(g=>g)?.trim();name&&allMatches.push({name,matchKind:"action",matchIndex:m.index,priority:priorities.action})}),settings.detectVocative&&vocativeRegex&&findMatches(combined,vocativeRegex,quoteRanges,!0).forEach(m=>{const name=m.groups?.[0]?.trim();name&&allMatches.push({name,matchKind:"vocative",matchIndex:m.index,priority:priorities.vocative})}),settings.detectPossessive&&settings.patterns?.length){const names_poss=settings.patterns.map(s=>(s||"").trim()).filter(Boolean);if(names_poss.length){const possRe=new RegExp("\\b("+names_poss.map(escapeRegex).join("|")+")[’'`']s\\b","gi");findMatches(combined,possRe,quoteRanges).forEach(m=>{const name=m.groups?.[0]?.trim();name&&allMatches.push({name,matchKind:"possessive",matchIndex:m.index,priority:priorities.possessive})})}}return settings.detectGeneral&&nameRegex&&findMatches(combined,nameRegex,quoteRanges).forEach(m=>{const name=String(m.groups?.[0]||m.match).replace(/-(?:sama|san)$/i,"").trim();name&&allMatches.push({name,matchKind:"name",matchIndex:m.index,priority:priorities.name})}),allMatches}
-function findBestMatch(combined,regexes,settings,quoteRanges){if(!combined)return null;const allMatches=findAllMatches(combined,regexes,settings,quoteRanges);if(0===allMatches.length)return null;const activeMatches=allMatches.filter(m=>"speaker"===m.matchKind||"attribution"===m.matchKind||"action"===m.matchKind);if(activeMatches.length>0)return activeMatches.sort((a,b)=>b.matchIndex-a.matchIndex),activeMatches[0];const passiveMatches=allMatches.filter(m=>"vocative"===m.matchKind||"possessive"===m.matchKind||"name"===m.matchKind);return passiveMatches.length>0?(passiveMatches.sort((a,b)=>b.matchIndex-a.matchIndex),passiveMatches[0]):null}
+
+function findBestMatch(combined, regexes, settings, quoteRanges) {
+    if (!combined) return null;
+    const allMatches = findAllMatches(combined, regexes, settings, quoteRanges);
+    if (allMatches.length === 0) return null;
+
+    const bias = Number(settings.detectionBias || 0);
+
+    // Score every match based on its position, priority, and the user-defined bias.
+    const scoredMatches = allMatches.map(match => {
+        const isActive = match.priority >= 3; // speaker, attribution, action
+        // Base score is primarily the match's index (recency).
+        let score = match.matchIndex;
+        // The bias adjusts the score based on match type.
+        // Positive bias boosts active matches, negative bias penalizes them (relatively favoring passive ones).
+        if (isActive) {
+            score += bias;
+        }
+        return { ...match, score };
+    });
+
+    // The best match is the one with the highest final score.
+    scoredMatches.sort((a, b) => b.score - a.score);
+    return scoredMatches[0];
+}
+
 function normalizeStreamText(s){return s?String(s).replace(/[\uFEFF\u200B\u200C\u200D]/g,"").replace(/[\u2018\u2019\u201A\u201B]/g,"'").replace(/[\u201C\u201D\u201E\u201F]/g,'"').replace(/(\*\*|__|~~|`{1,3})/g,"").replace(/\u00A0/g," "):""}
 function normalizeCostumeName(n){if(!n)return"";let s=String(n).trim();s.startsWith("/")&&(s=s.slice(1).trim());const first=s.split(/[\/\s]+/).filter(Boolean)[0]||s;return String(first).replace(/[-_](?:sama|san)$/i,"").trim()}
 const perMessageBuffers=new Map,perMessageStates=new Map;let lastIssuedCostume=null,lastSwitchTimestamp=0;const lastTriggerTimes=new Map,failedTriggerTimes=new Map;let _streamHandler=null,_genStartHandler=null,_genEndHandler=null,_msgRecvHandler=null,_chatChangedHandler=null;const MAX_MESSAGE_BUFFERS=60;
@@ -192,6 +217,8 @@ jQuery(async () => {
         $("#cs-global-cooldown").val(profile.globalCooldownMs || PROFILE_DEFAULTS.globalCooldownMs);
         $("#cs-repeat-suppress").val(profile.repeatSuppressMs || PROFILE_DEFAULTS.repeatSuppressMs);
         $("#cs-token-process-threshold").val(profile.tokenProcessThreshold || PROFILE_DEFAULTS.tokenProcessThreshold);
+        $("#cs-detection-bias").val(profile.detectionBias || PROFILE_DEFAULTS.detectionBias);
+        $("#cs-detection-bias-value").text(profile.detectionBias || PROFILE_DEFAULTS.detectionBias);
         $("#cs-detect-attribution").prop("checked", !!profile.detectAttribution);
         $("#cs-detect-action").prop("checked", !!profile.detectAction);
         $("#cs-detect-vocative").prop("checked", !!profile.detectVocative);
@@ -293,7 +320,7 @@ jQuery(async () => {
     
         if (winners.length > 0) {
             winners.forEach(match => {
-                winnerList.append(`<li><b>${match.name}</b> <small>(${match.matchKind} @ ${match.matchIndex}, priority: ${match.priority})</small></li>`);
+                winnerList.append(`<li><b>${match.name}</b> <small>(${match.matchKind} @ ${match.matchIndex}, score: ${Math.round(match.score)})</small></li>`);
             });
         } else {
             winnerList.html('<li style="color: var(--text-color-soft);">No winning match.</li>');
@@ -313,6 +340,7 @@ jQuery(async () => {
             globalCooldownMs: parseInt($("#cs-global-cooldown").val() || PROFILE_DEFAULTS.globalCooldownMs, 10),
             repeatSuppressMs: parseInt($("#cs-repeat-suppress").val() || PROFILE_DEFAULTS.repeatSuppressMs, 10),
             tokenProcessThreshold: parseInt($("#cs-token-process-threshold").val() || PROFILE_DEFAULTS.tokenProcessThreshold, 10),
+            detectionBias: parseInt($("#cs-detection-bias").val() || PROFILE_DEFAULTS.detectionBias, 10),
             detectAttribution: !!$("#cs-detect-attribution").prop("checked"),
             detectAction: !!$("#cs-detect-action").prop("checked"),
             detectVocative: !!$("#cs-detect-vocative").prop("checked"),
@@ -409,6 +437,10 @@ jQuery(async () => {
             }
             updateFocusLockUI();
             persistSettings();
+        });
+
+        $("#cs-detection-bias").off('input.cs').on('input.cs', function() {
+            $("#cs-detection-bias-value").text($(this).val());
         });
 
         $("#cs-reset").off('click.cs').on("click.cs", async () => { await manualReset(); });
@@ -581,7 +613,7 @@ jQuery(async () => {
     try { unload(); } catch (e) {}
     try { eventSource.on(streamEventName, _streamHandler); eventSource.on(event_types.GENERATION_STARTED, _genStartHandler); eventSource.on(event_types.GENERATION_ENDED, _genEndHandler); eventSource.on(event_types.MESSAGE_RECEIVED, _msgRecvHandler); eventSource.on(event_types.CHAT_CHANGED, _chatChangedHandler); } catch (e) { console.error("CostumeSwitch: failed to attach event handlers:", e); }
     try { window[`__${extensionName}_unload`] = unload; } catch (e) {}
-    console.log("SillyTavern-CostumeSwitch v1.2.0 loaded successfully.");
+    console.log("SillyTavern-CostumeSwitch v1.3.0 loaded successfully.");
 });
 
 function getSettingsObj() {
