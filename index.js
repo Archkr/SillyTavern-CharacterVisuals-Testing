@@ -3,7 +3,7 @@ import { saveSettingsDebounced, event_types, eventSource } from "../../../../scr
 import { executeSlashCommandsOnChatInput } from "../../../slash-commands.js";
 
 // MODIFIED v1.2.4: Updated to reflect new fixes.
-const extensionName = "Costume-Switch-Testing"; // <-- Make sure this matches your folder name
+const extensionName = "SillyTavern-Costume-Switch-Testing"; // <-- Make sure this matches your folder name
 const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
 
 // Default settings for a single profile.
