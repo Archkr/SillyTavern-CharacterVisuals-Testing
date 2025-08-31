@@ -439,8 +439,17 @@ jQuery(async () => {
             persistSettings();
         });
 
-        $("#cs-detection-bias").off('input.cs').on('input.cs', function() {
+        $("#cs-detection-bias").off('input.cs change.cs').on('input.cs', function() {
+            // Update display in real-time as slider moves
             $("#cs-detection-bias-value").text($(this).val());
+        }).on('change.cs', function() {
+            // Save when user releases the slider and automatically re-run the test
+            const profile = getActiveProfile(settings);
+            if (profile) {
+                profile.detectionBias = parseInt($(this).val(), 10);
+                persistSettings();
+                testRegexPattern(); 
+            }
         });
 
         $("#cs-reset").off('click.cs').on("click.cs", async () => { await manualReset(); });
