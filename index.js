@@ -101,7 +101,6 @@ function buildAttributionRegex(patternList) {
     try { return new RegExp(B, f); } catch (err) { console.warn("buildAttributionRegex compile failed:", err); return null; }
 }
 
-// MODIFIED v1.3.0: Removed ambiguous verbs that are also in attribution.
 function buildActionRegex(patternList) {
     const e = (patternList || []).map(parsePatternEntry).filter(Boolean);
     if (!e.length) return null; checkPatternComplexity(e);
@@ -140,26 +139,49 @@ function findMatches(combined, regex, quoteRanges, searchInsideQuotes = false) {
     return results;
 }
 
+// [FIXED] Rewritten to process detections in priority order to prevent mislabeling.
 function findAllMatches(combined, regexes, settings, quoteRanges) {
-    const allMatches = [], { speakerRegex, attributionRegex, actionRegex, vocativeRegex, nameRegex } = regexes;
-    if (speakerRegex) findMatches(combined, speakerRegex, quoteRanges).forEach(m => { const name = m.groups?.[0]?.trim(); name && allMatches.push({ name, matchKind: "speaker", matchIndex: m.index }); });
-    if (settings.detectAttribution && attributionRegex) findMatches(combined, attributionRegex, quoteRanges).forEach(m => { const name = m.groups?.find(g => g)?.trim(); name && allMatches.push({ name, matchKind: "attribution", matchIndex: m.index }); });
-    if (settings.detectAction && actionRegex) findMatches(combined, actionRegex, quoteRanges).forEach(m => { const name = m.groups?.find(g => g)?.trim(); name && allMatches.push({ name, matchKind: "action", matchIndex: m.index }); });
-    if (settings.detectVocative && vocativeRegex) findMatches(combined, vocativeRegex, quoteRanges, true).forEach(m => { const name = m.groups?.[0]?.trim(); name && allMatches.push({ name, matchKind: "vocative", matchIndex: m.index }); });
+    // Use a map to store the highest-priority match found at each index.
+    // This ensures that once an index is matched, a lower-priority regex can't overwrite it.
+    const matchesByIndex = new Map();
+
+    const addMatch = (match, kind, nameExtractor) => {
+        if (matchesByIndex.has(match.index)) return;
+        const name = nameExtractor(match);
+        if (name) {
+            matchesByIndex.set(match.index, { name, matchKind: kind, matchIndex: match.index });
+        }
+    };
+
+    // Process in order of priority (highest first)
+    if (regexes.speakerRegex) {
+        findMatches(combined, regexes.speakerRegex, quoteRanges, false)
+            .forEach(m => addMatch(m, 'speaker', (m) => m.groups?.[0]?.trim()));
+    }
+    if (settings.detectAttribution && regexes.attributionRegex) {
+        findMatches(combined, regexes.attributionRegex, quoteRanges, false)
+            .forEach(m => addMatch(m, 'attribution', (m) => m.groups?.find(g => g)?.trim()));
+    }
+    if (settings.detectAction && regexes.actionRegex) {
+        findMatches(combined, regexes.actionRegex, quoteRanges, false)
+            .forEach(m => addMatch(m, 'action', (m) => m.groups?.find(g => g)?.trim()));
+    }
+    if (settings.detectVocative && regexes.vocativeRegex) {
+        findMatches(combined, regexes.vocativeRegex, quoteRanges, true)
+            .forEach(m => addMatch(m, 'vocative', (m) => m.groups?.[0]?.trim()));
+    }
     if (settings.detectPossessive && settings.patterns?.length) {
         const possRe = new RegExp(`\\b(${settings.patterns.map(escapeRegex).join("|")})['\`’]s\\b`, "gi");
-        findMatches(combined, possRe, quoteRanges).forEach(m => { const name = m.groups?.[0]?.trim(); name && allMatches.push({ name, matchKind: "possessive", matchIndex: m.index }); });
+        findMatches(combined, possRe, quoteRanges, false)
+            .forEach(m => addMatch(m, 'possessive', (m) => m.groups?.[0]?.trim()));
     }
-    // MODIFIED v1.3.0: Only run name regex if no other match exists at the same position.
-    if (settings.detectGeneral && nameRegex) {
-        findMatches(combined, nameRegex, quoteRanges).forEach(m => {
-            const name = String(m.groups?.[0] || m.match).trim();
-            if (name && !allMatches.some(match => match.matchIndex === m.index)) {
-                allMatches.push({ name, matchKind: "name", matchIndex: m.index });
-            }
-        });
+    if (settings.detectGeneral && regexes.nameRegex) {
+        findMatches(combined, regexes.nameRegex, quoteRanges, false)
+            .forEach(m => addMatch(m, 'name', (m) => m.groups?.[0]?.trim()));
     }
-    return allMatches;
+
+    // Convert map values back to an array for processing.
+    return Array.from(matchesByIndex.values());
 }
 
 function findBestMatch(combined, regexes, settings, quoteRanges) {
@@ -350,7 +372,6 @@ jQuery(async () => {
         const winners = [];
         let lastWinnerName = null;
         
-        // MODIFIED v1.3.0: Changed tester to be character-by-character for true stream simulation
         for (let i = 1; i <= combined.length; i++) {
             const currentBuffer = combined.substring(0, i);
             const bestMatch = findBestMatch(currentBuffer, tempRegexes, tempProfile, getQuoteRanges(currentBuffer));
