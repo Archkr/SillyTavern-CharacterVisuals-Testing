@@ -177,6 +177,11 @@
               <input id="cs-token-process-threshold" class="text_pole" type="number" min="0" />
               <small>How many characters to wait for before checking. Lower is more reactive but uses more CPU. Higher is smoother but may react slower.</small>
             </div>
+            <div class="inline-group" style="margin-top: 15px;">
+              <label for="cs-detection-bias">Detection Bias (<span id="cs-detection-bias-value">0</span>)</label>
+              <input id="cs-detection-bias" type="range" min="-50" max="50" value="0" style="width: 100%;" />
+              <small>Adjusts detection accuracy. Higher values favor action/dialogue tags; lower values favor the most recently mentioned character.</small>
+            </div>
           </div>
 
           <div class="cs-block">
