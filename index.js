@@ -101,11 +101,12 @@ function buildAttributionRegex(patternList) {
     try { return new RegExp(B, f); } catch (err) { console.warn("buildAttributionRegex compile failed:", err); return null; }
 }
 
+// MODIFIED v1.3.0: Removed ambiguous verbs that are also in attribution.
 function buildActionRegex(patternList) {
     const e = (patternList || []).map(parsePatternEntry).filter(Boolean);
     if (!e.length) return null; checkPatternComplexity(e);
     const n = e.map(x => `(?:${x.body})`).join("|");
-    const a = "(?:blinked|bowed|crouched|frowned|gestured|glanced|grinned|looked|nodded|paused|ran|shrugged|sighed|smiled|stared|stepped|turned|walked|yelled)";
+    const a = "(?:blinked|bowed|crouched|frowned|gestured|glanced|grinned|looked|paused|ran|shrugged|smiled|stared|stepped|turned|walked)";
     const p = `\\b(${n})(?:\\s+[A-Z][a-z]+)*\\b(?:\\s+[a-zA-Z'’]+){0,4}?\\s+${a}\\b`;
     const f = computeFlagsFromEntries(e, true);
     try { return new RegExp(p, f); } catch (err) { console.warn("buildActionRegex compile failed:", err); return null; }
@@ -149,7 +150,15 @@ function findAllMatches(combined, regexes, settings, quoteRanges) {
         const possRe = new RegExp(`\\b(${settings.patterns.map(escapeRegex).join("|")})['\`’]s\\b`, "gi");
         findMatches(combined, possRe, quoteRanges).forEach(m => { const name = m.groups?.[0]?.trim(); name && allMatches.push({ name, matchKind: "possessive", matchIndex: m.index }); });
     }
-    if (settings.detectGeneral && nameRegex) findMatches(combined, nameRegex, quoteRanges).forEach(m => { const name = String(m.groups?.[0] || m.match).trim(); name && allMatches.push({ name, matchKind: "name", matchIndex: m.index }); });
+    // MODIFIED v1.3.0: Only run name regex if no other match exists at the same position.
+    if (settings.detectGeneral && nameRegex) {
+        findMatches(combined, nameRegex, quoteRanges).forEach(m => {
+            const name = String(m.groups?.[0] || m.match).trim();
+            if (name && !allMatches.some(match => match.matchIndex === m.index)) {
+                allMatches.push({ name, matchKind: "name", matchIndex: m.index });
+            }
+        });
+    }
     return allMatches;
 }
 
@@ -163,8 +172,6 @@ function findBestMatch(combined, regexes, settings, quoteRanges) {
 
 function normalizeStreamText(s) { return s ? String(s).replace(/[\uFEFF\u200B\u200C\u200D]/g, "").replace(/[\u2018\u2019\u201A\u201B]/g, "'").replace(/[\u201C\u201D\u201E\u201F]/g, '"').replace(/(\*\*|__|~~|`{1,3})/g, "").replace(/\u00A0/g, " ") : ""; }
 function normalizeCostumeName(n) { if (!n) return ""; return String(n).trim().replace(/-(?:sama|san)$/i, "").trim(); }
-
-// ... (rest of the file is mostly unchanged UI and event handling logic) ...
 
 const perMessageBuffers = new Map, perMessageStates = new Map;
 let lastIssuedCostume = null, lastSwitchTimestamp = 0;
@@ -342,11 +349,10 @@ jQuery(async () => {
         winnerList.empty();
         const winners = [];
         let lastWinnerName = null;
-        const words = combined.split(/(\s+)/);
-        let currentBuffer = "";
         
-        for (const word of words) {
-            currentBuffer += word;
+        // MODIFIED v1.3.0: Changed tester to be character-by-character for true stream simulation
+        for (let i = 1; i <= combined.length; i++) {
+            const currentBuffer = combined.substring(0, i);
             const bestMatch = findBestMatch(currentBuffer, tempRegexes, tempProfile, getQuoteRanges(currentBuffer));
             if (bestMatch && bestMatch.name !== lastWinnerName) {
                 winners.push(bestMatch);
@@ -545,14 +551,14 @@ jQuery(async () => {
         eventSource?.off?.(event_types.CHAT_CHANGED, _chatChangedHandler);
     }
     
-    unload(); // Clear any previous listeners
+    unload();
     eventSource.on(streamEventName, _streamHandler);
     eventSource.on(event_types.GENERATION_STARTED, _genStartHandler);
     eventSource.on(event_types.GENERATION_ENDED, _genEndHandler);
     eventSource.on(event_types.MESSAGE_RECEIVED, _msgRecvHandler);
     eventSource.on(event_types.CHAT_CHANGED, _chatChangedHandler);
     window[`__${extensionName}_unload`] = unload;
-    console.log(`SillyTavern-CostumeSwitch v1.2.5 loaded successfully.`);
+    console.log(`SillyTavern-CostumeSwitch v1.3.0 loaded successfully.`);
 });
 
 function getSettingsObj() {
