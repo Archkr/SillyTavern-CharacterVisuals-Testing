@@ -106,7 +106,7 @@ function buildDirectActionRegex(patternList, verbList) {
 function buildPossessiveRegex(patternList) {
     const e = (patternList || []).map(parsePatternEntry).filter(Boolean); if (!e.length) return null;
     const names = e.map(x => `(?:${x.body})`).join("|");
-    const body = `\\b(${names})[’\`']s\\b`;
+    const body = `\\b(${names})(?:\\s+[A-Z][a-z]+)*[’\`']s\\b`;
     const flags = computeFlagsFromEntries(e, true);
     try { return new RegExp(body, flags) } catch (err) { return console.warn("buildPossessiveRegex compile failed:", err), null }
 }
@@ -115,7 +115,7 @@ function buildPossessiveRegex(patternList) {
 function buildVoiceAttributionRegex(patternList) {
     const e = (patternList || []).map(parsePatternEntry).filter(Boolean); if (!e.length) return null;
     const names = e.map(x => `(?:${x.body})`).join("|");
-    const body = `\\b(${names})[’\`']s\\s+(?:[a-zA-Z'’]+\\s+){0,3}?voice\\b`;
+    const body = `\\b(${names})(?:\\s+[A-Z][a-z]+)*[’\`']s\\s+(?:[a-zA-Z'’]+\\s+){0,3}?voice\\b`;
     const flags = computeFlagsFromEntries(e, true);
     try { return new RegExp(body, flags) } catch (err) { return console.warn("buildVoiceAttributionRegex compile failed:", err), null }
 }
