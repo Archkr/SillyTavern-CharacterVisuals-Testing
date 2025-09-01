@@ -187,8 +187,8 @@ jQuery(async () => {
 
             const lowerIgnored = (profile.ignorePatterns || []).map(p => String(p).trim().toLowerCase());
             const effectivePatterns = (profile.patterns || []).filter(p => !lowerIgnored.includes(String(p).trim().toLowerCase()));
-            const attributionVerbs = (profile.attributionVerbs || PROFILE_DEFAULTS.attributionVerbs).replace(/\s*\|\s*/g, '|');
-            const actionVerbs = (profile.actionVerbs || PROFILE_DEFAULTS.actionVerbs).replace(/\s*\|\s*/g, '|');
+            const attributionVerbs = String(profile.attributionVerbs || PROFILE_DEFAULTS.attributionVerbs).replace(/\s*\|\s*/g, '|');
+            const actionVerbs = String(profile.actionVerbs || PROFILE_DEFAULTS.actionVerbs).replace(/\s*\|\s*/g, '|');
 
             nameRegex = buildNameRegex(effectivePatterns);
             speakerRegex = buildSpeakerRegex(effectivePatterns);
