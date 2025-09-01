@@ -2,7 +2,7 @@ import { extension_settings, getContext } from "../../../extensions.js";
 import { saveSettingsDebounced, event_types, eventSource } from "../../../../script.js";
 import { registerSlashCommand, executeSlashCommandsOnChatInput } from "../../../slash-commands.js";
 
-const extensionName = "SillyTavern-CostumeSwitch-Testing";
+const extensionName = "SillyTavern-CostumeSwitch";
 const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
 
 // Default settings for a single profile.
@@ -649,7 +649,6 @@ jQuery(async () => {
     // Slash Command for Scene Analysis
     registerSlashCommand("scene", 
         (args, a, b) => {
-            // Manually check the first argument. This is more reliable.
             const debugMode = (args[0] || '').trim().toLowerCase() === 'debug';
             const ctx = getContext();
             const lastMessage = ctx.chat.slice().reverse().find(msg => !msg.is_user && msg.mes);
@@ -658,31 +657,37 @@ jQuery(async () => {
                 toastr.warning("Could not find the last AI message to analyze.");
                 return;
             }
-            
-            const profile = getActiveProfile(settings);
-            if (!profile) {
-                toastr.error("No active Costume Switch profile found.");
-                return;
-            }
 
-            // Temporarily build regexes based on current profile to ensure accuracy
+            // Create a temporary profile by reading directly from the UI.
+            // This guarantees we use the most up-to-date settings, saved or not.
+            const tempProfile = {
+                patterns: $("#cs-patterns").val().split(/\r?\n/).map(s => s.trim()).filter(Boolean),
+                ignorePatterns: $("#cs-ignore-patterns").val().split(/\r?\n/).map(s => s.trim()).filter(Boolean),
+                attributionVerbs: $("#cs-attribution-verbs").val().trim().replace(/\s*\n\s*/g, '|'),
+                actionVerbs: $("#cs-action-verbs").val().trim().replace(/\s*\n\s*/g, '|'),
+                detectAttribution: !!$("#cs-detect-attribution").prop("checked"),
+                detectAction: !!$("#cs-detect-action").prop("checked"),
+                detectVocative: !!$("#cs-detect-vocative").prop("checked"),
+                detectPossessive: !!$("#cs-detect-possessive").prop("checked"),
+                detectGeneral: !!$("#cs-detect-general").prop("checked"),
+            };
+
+            // Temporarily build regexes based on the fresh UI data
             const tempRegexes = {};
             try {
-                const lowerIgnored = (profile.ignorePatterns || []).map(p => String(p).trim().toLowerCase());
-                const effectivePatterns = (profile.patterns || []).filter(p => !lowerIgnored.includes(String(p).trim().toLowerCase()));
-                const attributionVerbs = String(profile.attributionVerbs || PROFILE_DEFAULTS.attributionVerbs).replace(/\s*\|\s*/g, '|');
-                const actionVerbs = String(profile.actionVerbs || PROFILE_DEFAULTS.actionVerbs).replace(/\s*\|\s*/g, '|');
+                const lowerIgnored = (tempProfile.ignorePatterns || []).map(p => String(p).trim().toLowerCase());
+                const effectivePatterns = (tempProfile.patterns || []).filter(p => !lowerIgnored.includes(String(p).trim().toLowerCase()));
                 tempRegexes.nameRegex = buildNameRegex(effectivePatterns);
                 tempRegexes.speakerRegex = buildSpeakerRegex(effectivePatterns);
-                tempRegexes.attributionRegex = buildAttributionRegex(effectivePatterns, attributionVerbs);
-                tempRegexes.actionRegex = buildActionRegex(effectivePatterns, actionVerbs);
+                tempRegexes.attributionRegex = buildAttributionRegex(effectivePatterns, tempProfile.attributionVerbs);
+                tempRegexes.actionRegex = buildActionRegex(effectivePatterns, tempProfile.actionVerbs);
                 tempRegexes.vocativeRegex = buildVocativeRegex(effectivePatterns);
             } catch (e) {
                 toastr.error(`Failed to build patterns for analysis: ${e.message}`);
                 return;
             }
 
-            const scores = calculateCharacterFocusScores(lastMessage.mes, profile, tempRegexes);
+            const scores = calculateCharacterFocusScores(lastMessage.mes, tempProfile, tempRegexes);
             
             const sortedScores = Object.entries(scores).sort((a, b) => b[1] - a[1]);
             if (sortedScores.length === 0) {
