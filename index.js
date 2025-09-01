@@ -649,6 +649,7 @@ jQuery(async () => {
     // Slash Command for Scene Analysis
     registerSlashCommand("scene", 
         (args, a, b) => {
+            const debugMode = (args[0] || '').toLowerCase() === 'debug';
             const ctx = getContext();
             const lastMessage = ctx.chat.slice().reverse().find(msg => !msg.is_user && msg.mes);
 
@@ -685,6 +686,15 @@ jQuery(async () => {
             const sortedScores = Object.entries(scores).sort((a, b) => b[1] - a[1]);
             if (sortedScores.length === 0) {
                 toastr.info("No primary characters were detected in the last message.");
+                return;
+            }
+
+            if (debugMode) {
+                let debugString = "<strong>Scene Debug Scores:</strong><br>";
+                sortedScores.forEach(([name, score]) => {
+                    debugString += `${name}: ${score}<br>`;
+                });
+                toastr.info(debugString, "Scene Analysis Debug", {timeOut: 15000}); // Longer timeout for readability
                 return;
             }
 
