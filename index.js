@@ -2,7 +2,7 @@ import { extension_settings, getContext } from "../../../extensions.js";
 import { saveSettingsDebounced, event_types, eventSource } from "../../../../script.js";
 import { registerSlashCommand, executeSlashCommandsOnChatInput } from "../../../slash-commands.js";
 
-const extensionName = "SillyTavern-CostumeSwitch-Testing";
+const extensionName = "SillyTavern-CostumeSwitch";
 const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
 
 // Default settings for a single profile.
@@ -249,8 +249,8 @@ jQuery(async () => {
         $("#cs-detect-vocative").prop("checked", !!profile.detectVocative);
         $("#cs-detect-possessive").prop("checked", !!profile.detectPossessive);
         $("#cs-detect-general").prop("checked", !!profile.detectGeneral);
-        $("#cs-attribution-verbs").val((profile.attributionVerbs || PROFILE_DEFAULTS.attributionVerbs).replace(/\|/g, '\n'));
-        $("#cs-action-verbs").val((profile.actionVerbs || PROFILE_DEFAULTS.actionVerbs).replace(/\|/g, '\n'));
+        $("#cs-attribution-verbs").val(String(profile.attributionVerbs || PROFILE_DEFAULTS.attributionVerbs).replace(/\|/g, '\n'));
+        $("#cs-action-verbs").val(String(profile.actionVerbs || PROFILE_DEFAULTS.actionVerbs).replace(/\|/g, '\n'));
         renderMappings(profile);
         populateFocusLockDropdown();
         recompileRegexes();
