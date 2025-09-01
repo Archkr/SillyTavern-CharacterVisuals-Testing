@@ -121,45 +121,58 @@ function getQuoteRanges(s) { const q=/"|\u201C|\u201D/g,pos=[],ranges=[];let m;w
 function isIndexInsideQuotesRanges(ranges,idx){for(const[a,b]of ranges)if(idx>a&&idx<b)return!0;return!1}
 function findMatches(combined,regex,quoteRanges,searchInsideQuotes=!1){if(!combined||!regex)return[];const flags=regex.flags.includes("g")?regex.flags:regex.flags+"g",re=new RegExp(regex.source,flags),results=[];let m;for(; (m=re.exec(combined))!==null;){const idx=m.index||0;(searchInsideQuotes||!isIndexInsideQuotesRanges(quoteRanges,idx))&&results.push({match:m[0],groups:m.slice(1),index:idx}),re.lastIndex===m.index&&re.lastIndex++}return results}
 
+/**
+ * [CODE FIX 2] This function is being modified to prevent overlapping matches.
+ * A Map (`matchIndexMap`) is introduced to store the highest-priority match found
+ * at each specific character index. When a new match is found, it checks if one
+ * already exists at that index. If it does, it only keeps the one with the higher
+ * priority. This prevents the bug where a low-priority 'possessive' match could
+ * override a high-priority 'attribution' match at the same location.
+ */
 function findAllMatches(combined, regexes, settings, quoteRanges) {
-    const allMatches = [];
-    const { speakerRegex, attributionRegex, directActionRegex, possessiveRegex, vocativeRegex, nameRegex } = regexes;
+    const matchIndexMap = new Map();
     const priorities = { speaker: 5, attribution: 4, action: 3, vocative: 2, possessive: 1, name: 0 };
+
+    const addMatch = (match) => {
+        if (!matchIndexMap.has(match.matchIndex) || match.priority > matchIndexMap.get(match.matchIndex).priority) {
+            matchIndexMap.set(match.matchIndex, match);
+        }
+    };
+
+    const { speakerRegex, attributionRegex, directActionRegex, possessiveRegex, vocativeRegex, nameRegex } = regexes;
     
     // Standard explicit detections
-    if (speakerRegex) findMatches(combined, speakerRegex, quoteRanges).forEach(m => { const name = m.groups?.[0]?.trim(); name && allMatches.push({ name, matchKind: "speaker", matchIndex: m.index, priority: priorities.speaker }); });
-    if (settings.detectAttribution && attributionRegex) findMatches(combined, attributionRegex, quoteRanges).forEach(m => { const name = m.groups?.find(g => g)?.trim(); name && allMatches.push({ name, matchKind: "attribution", matchIndex: m.index, priority: priorities.attribution }); });
-    if (settings.detectAction && directActionRegex) findMatches(combined, directActionRegex, quoteRanges).forEach(m => { const name = m.groups?.find(g => g)?.trim(); name && allMatches.push({ name, matchKind: "action", matchIndex: m.index, priority: priorities.action }); });
-    if (settings.detectVocative && vocativeRegex) findMatches(combined, vocativeRegex, quoteRanges, true).forEach(m => { const name = m.groups?.[0]?.trim(); name && allMatches.push({ name, matchKind: "vocative", matchIndex: m.index, priority: priorities.vocative }); });
-    if (settings.detectPossessive && possessiveRegex) findMatches(combined, possessiveRegex, quoteRanges).forEach(m => { const name = m.groups?.[0]?.trim(); name && allMatches.push({ name, matchKind: "possessive", matchIndex: m.index, priority: priorities.possessive }); });
-    if (settings.detectGeneral && nameRegex) findMatches(combined, nameRegex, quoteRanges).forEach(m => { const name = String(m.groups?.[0] || m.match).replace(/-(?:sama|san)$/i, "").trim(); name && allMatches.push({ name, matchKind: "name", matchIndex: m.index, priority: priorities.name }); });
+    if (speakerRegex) findMatches(combined, speakerRegex, quoteRanges).forEach(m => { const name = m.groups?.[0]?.trim(); name && addMatch({ name, matchKind: "speaker", matchIndex: m.index, priority: priorities.speaker }); });
+    if (settings.detectAttribution && attributionRegex) findMatches(combined, attributionRegex, quoteRanges).forEach(m => { const name = m.groups?.find(g => g)?.trim(); name && addMatch({ name, matchKind: "attribution", matchIndex: m.index, priority: priorities.attribution }); });
+    if (settings.detectAction && directActionRegex) findMatches(combined, directActionRegex, quoteRanges).forEach(m => { const name = m.groups?.find(g => g)?.trim(); name && addMatch({ name, matchKind: "action", matchIndex: m.index, priority: priorities.action }); });
+    if (settings.detectVocative && vocativeRegex) findMatches(combined, vocativeRegex, quoteRanges, true).forEach(m => { const name = m.groups?.[0]?.trim(); name && addMatch({ name, matchKind: "vocative", matchIndex: m.index, priority: priorities.vocative }); });
+    if (settings.detectPossessive && possessiveRegex) findMatches(combined, possessiveRegex, quoteRanges).forEach(m => { const name = m.groups?.[0]?.trim(); name && addMatch({ name, matchKind: "possessive", matchIndex: m.index, priority: priorities.possessive }); });
+    if (settings.detectGeneral && nameRegex) findMatches(combined, nameRegex, quoteRanges).forEach(m => { const name = String(m.groups?.[0] || m.match).replace(/-(?:sama|san)$/i, "").trim(); name && addMatch({ name, matchKind: "name", matchIndex: m.index, priority: priorities.name }); });
 
-    // NEW (v1.2.4): Advanced Pronoun resolution logic
+    // Pronoun resolution logic (remains the same)
     if (settings.detectAttribution && nameRegex) {
         const verbs = processVerbsForRegex(settings.attributionVerbs || '');
         if (verbs) {
-            // This regex looks for dialogue-ending punctuation followed by a pronoun and a verb.
             const pronounRegex = new RegExp(`(["”'][,.]?)\\s+(he|she|they)\\s+(${verbs})`, 'gi');
             findMatches(combined, pronounRegex, quoteRanges).forEach(pronounMatch => {
                 const pronounMatchIndex = pronounMatch.index;
-                // We search for the last mentioned character in the text *before* the pronoun appeared.
                 const textBeforePronoun = combined.substring(0, pronounMatchIndex);
                 
                 const nameMatchesBefore = findMatches(textBeforePronoun, nameRegex, getQuoteRanges(textBeforePronoun));
                 if (nameMatchesBefore.length > 0) {
-                    // The last name found is the most likely subject.
                     const lastMention = nameMatchesBefore[nameMatchesBefore.length - 1];
                     const name = (lastMention.groups?.[0] || lastMention.match).trim();
                     if (name) {
-                        allMatches.push({ name, matchKind: "attribution (pronoun)", matchIndex: pronounMatchIndex, priority: priorities.attribution });
+                        addMatch({ name, matchKind: "attribution (pronoun)", matchIndex: pronounMatchIndex, priority: priorities.attribution });
                     }
                 }
             });
         }
     }
 
-    return allMatches;
+    return Array.from(matchIndexMap.values());
 }
+
 
 /**
  * [CODE FIX] Rewrote the scoring logic to be simpler and more robust.
