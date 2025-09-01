@@ -121,35 +121,19 @@ function getQuoteRanges(s) { const q=/"|\u201C|\u201D/g,pos=[],ranges=[];let m;w
 function isIndexInsideQuotesRanges(ranges,idx){for(const[a,b]of ranges)if(idx>a&&idx<b)return!0;return!1}
 function findMatches(combined,regex,quoteRanges,searchInsideQuotes=!1){if(!combined||!regex)return[];const flags=regex.flags.includes("g")?regex.flags:regex.flags+"g",re=new RegExp(regex.source,flags),results=[];let m;for(; (m=re.exec(combined))!==null;){const idx=m.index||0;(searchInsideQuotes||!isIndexInsideQuotesRanges(quoteRanges,idx))&&results.push({match:m[0],groups:m.slice(1),index:idx}),re.lastIndex===m.index&&re.lastIndex++}return results}
 
-/**
- * [CODE FIX 2] This function is being modified to prevent overlapping matches.
- * A Map (`matchIndexMap`) is introduced to store the highest-priority match found
- * at each specific character index. When a new match is found, it checks if one
- * already exists at that index. If it does, it only keeps the one with the higher
- * priority. This prevents the bug where a low-priority 'possessive' match could
- * override a high-priority 'attribution' match at the same location.
- */
+// Reverting to the original findAllMatches function
 function findAllMatches(combined, regexes, settings, quoteRanges) {
-    const matchIndexMap = new Map();
-    const priorities = { speaker: 5, attribution: 4, action: 3, vocative: 2, possessive: 1, name: 0 };
-
-    const addMatch = (match) => {
-        if (!matchIndexMap.has(match.matchIndex) || match.priority > matchIndexMap.get(match.matchIndex).priority) {
-            matchIndexMap.set(match.matchIndex, match);
-        }
-    };
-
+    const allMatches = [];
     const { speakerRegex, attributionRegex, directActionRegex, possessiveRegex, vocativeRegex, nameRegex } = regexes;
+    const priorities = { speaker: 5, attribution: 4, action: 3, vocative: 2, possessive: 1, name: 0 };
     
-    // Standard explicit detections
-    if (speakerRegex) findMatches(combined, speakerRegex, quoteRanges).forEach(m => { const name = m.groups?.[0]?.trim(); name && addMatch({ name, matchKind: "speaker", matchIndex: m.index, priority: priorities.speaker }); });
-    if (settings.detectAttribution && attributionRegex) findMatches(combined, attributionRegex, quoteRanges).forEach(m => { const name = m.groups?.find(g => g)?.trim(); name && addMatch({ name, matchKind: "attribution", matchIndex: m.index, priority: priorities.attribution }); });
-    if (settings.detectAction && directActionRegex) findMatches(combined, directActionRegex, quoteRanges).forEach(m => { const name = m.groups?.find(g => g)?.trim(); name && addMatch({ name, matchKind: "action", matchIndex: m.index, priority: priorities.action }); });
-    if (settings.detectVocative && vocativeRegex) findMatches(combined, vocativeRegex, quoteRanges, true).forEach(m => { const name = m.groups?.[0]?.trim(); name && addMatch({ name, matchKind: "vocative", matchIndex: m.index, priority: priorities.vocative }); });
-    if (settings.detectPossessive && possessiveRegex) findMatches(combined, possessiveRegex, quoteRanges).forEach(m => { const name = m.groups?.[0]?.trim(); name && addMatch({ name, matchKind: "possessive", matchIndex: m.index, priority: priorities.possessive }); });
-    if (settings.detectGeneral && nameRegex) findMatches(combined, nameRegex, quoteRanges).forEach(m => { const name = String(m.groups?.[0] || m.match).replace(/-(?:sama|san)$/i, "").trim(); name && addMatch({ name, matchKind: "name", matchIndex: m.index, priority: priorities.name }); });
+    if (speakerRegex) findMatches(combined, speakerRegex, quoteRanges).forEach(m => { const name = m.groups?.[0]?.trim(); name && allMatches.push({ name, matchKind: "speaker", matchIndex: m.index, priority: priorities.speaker }); });
+    if (settings.detectAttribution && attributionRegex) findMatches(combined, attributionRegex, quoteRanges).forEach(m => { const name = m.groups?.find(g => g)?.trim(); name && allMatches.push({ name, matchKind: "attribution", matchIndex: m.index, priority: priorities.attribution }); });
+    if (settings.detectAction && directActionRegex) findMatches(combined, directActionRegex, quoteRanges).forEach(m => { const name = m.groups?.find(g => g)?.trim(); name && allMatches.push({ name, matchKind: "action", matchIndex: m.index, priority: priorities.action }); });
+    if (settings.detectVocative && vocativeRegex) findMatches(combined, vocativeRegex, quoteRanges, true).forEach(m => { const name = m.groups?.[0]?.trim(); name && allMatches.push({ name, matchKind: "vocative", matchIndex: m.index, priority: priorities.vocative }); });
+    if (settings.detectPossessive && possessiveRegex) findMatches(combined, possessiveRegex, quoteRanges).forEach(m => { const name = m.groups?.[0]?.trim(); name && allMatches.push({ name, matchKind: "possessive", matchIndex: m.index, priority: priorities.possessive }); });
+    if (settings.detectGeneral && nameRegex) findMatches(combined, nameRegex, quoteRanges).forEach(m => { const name = String(m.groups?.[0] || m.match).replace(/-(?:sama|san)$/i, "").trim(); name && allMatches.push({ name, matchKind: "name", matchIndex: m.index, priority: priorities.name }); });
 
-    // Pronoun resolution logic (remains the same)
     if (settings.detectAttribution && nameRegex) {
         const verbs = processVerbsForRegex(settings.attributionVerbs || '');
         if (verbs) {
@@ -163,24 +147,25 @@ function findAllMatches(combined, regexes, settings, quoteRanges) {
                     const lastMention = nameMatchesBefore[nameMatchesBefore.length - 1];
                     const name = (lastMention.groups?.[0] || lastMention.match).trim();
                     if (name) {
-                        addMatch({ name, matchKind: "attribution (pronoun)", matchIndex: pronounMatchIndex, priority: priorities.attribution });
+                        allMatches.push({ name, matchKind: "attribution (pronoun)", matchIndex: pronounMatchIndex, priority: priorities.attribution });
                     }
                 }
             });
         }
     }
 
-    return Array.from(matchIndexMap.values());
+    return allMatches;
 }
 
 
 /**
- * [CODE FIX] Rewrote the scoring logic to be simpler and more robust.
- * The old, complex weighting formula was producing unpredictable results when multiple
- * rules matched the same text segment. This new logic is direct:
- * - The base score is the character's position in the text (recency).
- * - The bias slider directly adds or subtracts points based on the match's priority.
- * This correctly handles conflicts and makes the bias slider's behavior intuitive.
+ * [CODE FIX 3 - FINAL] This is a complete rewrite of the scoring logic.
+ * It sorts all matches into a stable order: first by their position in the text (recency),
+ * and then by their priority. This absolutely guarantees that if two matches occur at the
+ * same index, the one with the higher priority will always be sorted first.
+ * By simply taking the last element of this sorted list, we get the most recent,
+ * highest-priority match, which is the correct "winner". The bias slider is then
+ * applied in a clear, final step.
  */
 function findBestMatch(combined, regexes, settings, quoteRanges) {
     if (!combined) return null;
@@ -188,22 +173,32 @@ function findBestMatch(combined, regexes, settings, quoteRanges) {
     const allMatches = findAllMatches(combined, regexes, settings, quoteRanges);
     if (allMatches.length === 0) return null;
 
+    // Sort by index first, then by priority. This is the key change.
+    allMatches.sort((a, b) => {
+        if (a.matchIndex !== b.matchIndex) {
+            return a.matchIndex - b.matchIndex;
+        }
+        return a.priority - b.priority;
+    });
+
     const bias = Number(settings.detectionBias || 0);
-    let bestMatch = null;
-    let highestScore = -Infinity;
 
-    for (const match of allMatches) {
-        // The base score is the match's index (recency).
-        // Priority points, scaled by the bias, are added to the score.
-        // A positive bias favors high-priority matches (dialogue, actions).
-        // A negative bias favors recency over match type.
-        const score = match.matchIndex + (match.priority * bias);
+    // With a stable sort, the last item is always the most recent, highest-priority match.
+    // We can then apply bias to potentially select a different winner.
+    // This is much cleaner than trying to score everything in one go.
+    let bestMatch = allMatches[allMatches.length - 1];
 
-        if (score >= highestScore) { // Use >= to allow new winners in case of a tie
-            highestScore = score;
-            bestMatch = match;
+    if (bias !== 0) {
+        let highestScore = -Infinity;
+        for (const match of allMatches) {
+            const score = match.matchIndex + (match.priority * bias);
+            if (score >= highestScore) {
+                highestScore = score;
+                bestMatch = match;
+            }
         }
     }
+    
     return bestMatch;
 }
 
