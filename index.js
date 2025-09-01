@@ -161,7 +161,39 @@ function findAllMatches(combined, regexes, settings, quoteRanges) {
     return allMatches;
 }
 
-function findBestMatch(combined, regexes, settings, quoteRanges) { if (!combined) return null; const allMatches = findAllMatches(combined, regexes, settings, quoteRanges); if (allMatches.length === 0) return null; const bias = Number(settings.detectionBias || 0), maxIndex = combined.length; let bestMatch = null, highestScore = -Infinity; for (const match of allMatches) { const recencyScore = (match.matchIndex / maxIndex) * 100, priorityScore = match.priority * 20, weight = (bias + 200) / 400, score = (priorityScore * weight) + (recencyScore * (1 - weight)); if (score > highestScore) { highestScore = score; bestMatch = match; } } return bestMatch; }
+/**
+ * [CODE FIX] Rewrote the scoring logic to be simpler and more robust.
+ * The old, complex weighting formula was producing unpredictable results when multiple
+ * rules matched the same text segment. This new logic is direct:
+ * - The base score is the character's position in the text (recency).
+ * - The bias slider directly adds or subtracts points based on the match's priority.
+ * This correctly handles conflicts and makes the bias slider's behavior intuitive.
+ */
+function findBestMatch(combined, regexes, settings, quoteRanges) {
+    if (!combined) return null;
+
+    const allMatches = findAllMatches(combined, regexes, settings, quoteRanges);
+    if (allMatches.length === 0) return null;
+
+    const bias = Number(settings.detectionBias || 0);
+    let bestMatch = null;
+    let highestScore = -Infinity;
+
+    for (const match of allMatches) {
+        // The base score is the match's index (recency).
+        // Priority points, scaled by the bias, are added to the score.
+        // A positive bias favors high-priority matches (dialogue, actions).
+        // A negative bias favors recency over match type.
+        const score = match.matchIndex + (match.priority * bias);
+
+        if (score >= highestScore) { // Use >= to allow new winners in case of a tie
+            highestScore = score;
+            bestMatch = match;
+        }
+    }
+    return bestMatch;
+}
+
 function calculateCharacterFocusScores(text, profile, regexes) { if (!text || !profile || !regexes) return {}; const combined = normalizeStreamText(text), quoteRanges = getQuoteRanges(combined), allMatches = findAllMatches(combined, regexes, profile, quoteRanges), scores = {}, points = { "attribution (pronoun)": 3, speaker: 3, attribution: 3, action: 2, vocative: 1, possessive: 1, name: 1 }; allMatches.forEach(match => { const normalizedName = normalizeCostumeName(match.name); if (!scores[normalizedName]) { scores[normalizedName] = 0; } scores[normalizedName] += (points[match.matchKind] || 0); }); return scores; }
 function normalizeStreamText(s){return s?String(s).replace(/[\uFEFF\u200B\u200C\u200D]/g,"").replace(/[\u2018\u2019\u201A\u201B]/g,"'").replace(/[\u201C\u201D\u201E\u201F]/g,'"').replace(/(\*\*|__|~~|`{1,3})/g,"").replace(/\u00A0/g," "):""}
 function normalizeCostumeName(n){if(!n)return"";let s=String(n).trim();s.startsWith("/")&&(s=s.slice(1).trim());const first=s.split(/[\/\s]+/).filter(Boolean)[0]||s;return String(first).replace(/[-_](?:sama|san)$/i,"").trim()}
