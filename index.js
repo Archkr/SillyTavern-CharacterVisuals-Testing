@@ -569,28 +569,15 @@ jQuery(async () => {
             allDetectionsList.html('<li style="color: var(--text-color-soft);">No detections found.</li>');
         }
 
-        // --- REWRITTEN AND SIMPLIFIED WINNER SIMULATION LOGIC ---
+        // --- FIXED: THIS NOW USES THE *REAL* DETECTION LOGIC ---
         const winnerList = $("#cs-test-winner-list");
         winnerList.empty();
-        const winners = [];
-        let lastWinnerName = null;
-
-        if (allMatches.length > 0) {
-            for (const match of allMatches) {
-                // Since allMatches is pre-sorted by index then priority,
-                // the first time we see a new name, it's guaranteed to be its
-                // highest-priority match at that point in the text, signifying a focus shift.
-                if (match.name !== lastWinnerName) {
-                    winners.push(match);
-                    lastWinnerName = match.name;
-                }
-            }
-        }
-
-        if (winners.length > 0) {
-            winners.forEach(match => {
-                winnerList.append(`<li><b>${match.name}</b> <small>(${match.matchKind} @${match.matchIndex}, p:${match.priority})</small></li>`);
-            });
+        
+        // Use the actual `findBestMatch` function to get the true winner for the entire text block.
+        const bestMatch = findBestMatch(combined, tempRegexes, tempProfile, quoteRanges);
+        
+        if (bestMatch) {
+            winnerList.append(`<li><b>${bestMatch.name}</b> <small>(${bestMatch.matchKind} @${bestMatch.matchIndex}, p:${bestMatch.priority})</small></li>`);
         } else {
             winnerList.html('<li style="color: var(--text-color-soft);">No winning match.</li>');
         }
