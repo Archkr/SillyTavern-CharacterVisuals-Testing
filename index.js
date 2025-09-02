@@ -135,7 +135,8 @@ jQuery(async () => {
         if (!verbs) return null;
 
         const optionalMiddleName = `(?:\\s+[A-Z][a-z]+)*`;
-        const postQuote = `(?:["“”][^"“”]*["“”])\\s*[,:;\\-–—]?\\s*(${names})${optionalMiddleName}\\s+(?:${verbs})\\b`;
+        // FIX: Made the quoted text part non-greedy and able to handle newlines to prevent catastrophic backtracking and improve matching.
+        const postQuote = `(?:["“”](?:.|\\n)*?["“”])\\s*[,:;\\-–—]?\\s*(${names})${optionalMiddleName}\\s+(?:${verbs})\\b`;
         const preQuote = `\\b(${names})${optionalMiddleName}\\s+(?:${verbs})\\s*[:,]?\\s*["“”]`;
         const voice = `\\b(${names})${optionalMiddleName}(?:[’\`']s|\\'s)\\s+(?:[a-zA-Z'’]+\\s+){0,3}?voice\\b`;
 
