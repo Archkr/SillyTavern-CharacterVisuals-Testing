@@ -265,16 +265,27 @@ jQuery(async () => {
         return allMatches.sort((a, b) => a.matchIndex - b.matchIndex);
     }
     
-    function calculateCharacterFocusScores(allMatches, bufferLength) {
+    function calculateCharacterFocusScores(allMatches, bufferLength, profile) {
         if (!allMatches || allMatches.length === 0) return {};
     
         const scores = {};
-        const DECAY_RATE = 0.8; // Decay is slightly more aggressive
+        const DECAY_RATE = 0.8; 
+        let lastFocusCharacter = null;
     
         allMatches.forEach(match => {
             const normalizedName = normalizeCostumeName(match.name);
             if (!scores[normalizedName]) {
                 scores[normalizedName] = { score: 0 };
+            }
+    
+            // NEW: More aggressive and targeted focus stealing logic.
+            // If this is a significant action AND it's from a NEW character...
+            if (match.points >= 2 && lastFocusCharacter && normalizedName !== lastFocusCharacter) {
+                // ...heavily penalize the score of the character who just lost the spotlight.
+                if (scores[lastFocusCharacter]) {
+                    debugLog({ profiles: { [settings.activeProfile]: profile } }, `Focus Steal: ${normalizedName} is taking focus from ${lastFocusCharacter}. Penalizing ${lastFocusCharacter}'s score.`);
+                    scores[lastFocusCharacter].score *= 0.25; 
+                }
             }
     
             const distance = bufferLength - match.matchIndex;
@@ -283,13 +294,9 @@ jQuery(async () => {
     
             scores[normalizedName].score += scoreToAdd;
 
-            // FIX: Implement "Focus Stealing". A high-priority match for one character reduces others' scores.
-            if (match.points >= 2) { // Possessive, Action, Attribution, or Speaker
-                for (const otherName in scores) {
-                    if (otherName !== normalizedName) {
-                        scores[otherName].score *= 0.5; // Halve the score of everyone else
-                    }
-                }
+            // If this was a significant action, update who the current focus character is.
+            if (match.points >= 2) {
+                lastFocusCharacter = normalizedName;
             }
         });
     
@@ -557,7 +564,7 @@ jQuery(async () => {
         }
 
         winnerList.empty();
-        const scores = calculateCharacterFocusScores(allMatches, combined.length);
+        const scores = calculateCharacterFocusScores(allMatches, combined.length, tempProfile);
         const winner = getWinningCharacter(scores);
         
         if (winner) {
@@ -736,7 +743,7 @@ jQuery(async () => {
             const allMatches = findAllMatches(combined, regexes, profile, getQuoteRanges(combined));
             if (!allMatches.length) return;
 
-            const scores = calculateCharacterFocusScores(allMatches, combined.length);
+            const scores = calculateCharacterFocusScores(allMatches, combined.length, profile);
             const winner = getWinningCharacter(scores);
 
             if (winner && winner !== state.lastWinner) {
@@ -803,7 +810,7 @@ jQuery(async () => {
             return;
         }
         const allMatches = findAllMatches(lastMessage.mes, tempRegexes, tempProfile, getQuoteRanges(lastMessage.mes));
-        const scores = calculateCharacterFocusScores(allMatches, lastMessage.mes.length);
+        const scores = calculateCharacterFocusScores(allMatches, lastMessage.mes.length, tempProfile);
         const sortedScores = Object.entries(scores).sort((a, b) => b[1].score - a[1].score);
 
         if (sortedScores.length === 0) {
@@ -836,7 +843,7 @@ jQuery(async () => {
         console.error("CostumeSwitch: failed to attach event handlers:", e);
     }
     try { window[`__${extensionName}_unload`] = unload; } catch (e) {}
-    console.log("SillyTavern-CostumeSwitch v1.4.0 (Patched) loaded successfully.");
+    console.log("SillyTavern-CostumeSwitch v1.5.0 (Patched) loaded successfully.");
 });
 
 function getSettingsObj() {
