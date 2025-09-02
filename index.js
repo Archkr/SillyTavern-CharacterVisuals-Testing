@@ -554,7 +554,11 @@ jQuery(async () => {
         };
         const quoteRanges = getQuoteRanges(combined);
         const allMatches = findAllMatches(combined, tempRegexes, tempProfile, quoteRanges);
-        allMatches.sort((a, b) => a.matchIndex - b.matchIndex);
+        allMatches.sort((a, b) => {
+            if (a.matchIndex !== b.matchIndex) return a.matchIndex - b.matchIndex;
+            return b.priority - a.priority; // secondary sort by priority descending
+        });
+
         const allDetectionsList = $("#cs-test-all-detections");
         allDetectionsList.empty();
         if (allMatches.length > 0) {
@@ -565,26 +569,48 @@ jQuery(async () => {
             allDetectionsList.html('<li style="color: var(--text-color-soft);">No detections found.</li>');
         }
 
+        // --- FIXED WINNER SIMULATION LOGIC ---
         const winnerList = $("#cs-test-winner-list");
         winnerList.empty();
         const winners = [];
-        const words = combined.split(/(\s+)/);
-        let currentBuffer = "";
         let lastWinnerName = null;
 
-        for (const word of words) {
-            currentBuffer += word;
-            const bestMatch = findBestMatch(currentBuffer, tempRegexes, tempProfile, getQuoteRanges(currentBuffer));
-            if (bestMatch && bestMatch.name !== lastWinnerName) {
-                winners.push(bestMatch);
-                lastWinnerName = bestMatch.name;
+        if (allMatches.length > 0) {
+            // This new simulation correctly processes the chronological list of detections
+            // to determine the flow of "winning" characters.
+            let currentBestMatch = allMatches[0];
+
+            for (let i = 1; i < allMatches.length; i++) {
+                const contender = allMatches[i];
+                // The winner changes if a new character appears with a higher or equal priority.
+                if (contender.name !== currentBestMatch.name && contender.priority >= currentBestMatch.priority) {
+                    if (currentBestMatch.name !== lastWinnerName) {
+                        winners.push(currentBestMatch);
+                        lastWinnerName = currentBestMatch.name;
+                    }
+                    currentBestMatch = contender;
+                }
+                // Or if any character appears with a strictly higher priority.
+                else if (contender.priority > currentBestMatch.priority) {
+                    currentBestMatch = contender;
+                }
+            }
+            // Add the final winner
+             if (currentBestMatch.name !== lastWinnerName) {
+                winners.push(currentBestMatch);
             }
         }
+        
         if (winners.length > 0) {
             winners.forEach(match => {
-                winnerList.append(`<li><b>${match.name}</b> <small>(${match.kind || match.matchKind} @${match.matchIndex})</small></li>`);
+                winnerList.append(`<li><b>${match.name}</b> <small>(${match.matchKind} @${match.matchIndex}, p:${match.priority})</small></li>`);
             });
-        } else {
+        } else if (allMatches.length > 0) {
+            // If there's only one character detected overall, they are the winner.
+            const finalWinner = allMatches[allMatches.length - 1];
+            winnerList.append(`<li><b>${finalWinner.name}</b> <small>(${finalWinner.matchKind} @${finalWinner.matchIndex}, p:${finalWinner.priority})</small></li>`);
+        }
+        else {
             winnerList.html('<li style="color: var(--text-color-soft);">No winning match.</li>');
         }
     }
