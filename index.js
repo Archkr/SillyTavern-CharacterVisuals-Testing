@@ -569,15 +569,47 @@ jQuery(async () => {
             allDetectionsList.html('<li style="color: var(--text-color-soft);">No detections found.</li>');
         }
 
-        // --- FIXED: THIS NOW USES THE *REAL* DETECTION LOGIC ---
+        // --- REWRITTEN: This now simulates the stream to find every focus shift ---
         const winnerList = $("#cs-test-winner-list");
         winnerList.empty();
+        const winners = [];
+        let lastWinnerName = null;
+        const bias = Number(tempProfile.detectionBias || 0);
+
+        // Loop through each point in time where a match occurs
+        for (let i = 0; i < allMatches.length; i++) {
+            // Consider all matches that have occurred up to this point
+            const matchesSoFar = allMatches.slice(0, i + 1);
+            let bestMatchSoFar = null;
+
+            if (bias === 0) {
+                // Default logic: highest priority, then most recent of those
+                const maxPriority = Math.max(...matchesSoFar.map(m => m.priority));
+                const topTierMatches = matchesSoFar.filter(m => m.priority === maxPriority);
+                bestMatchSoFar = topTierMatches[topTierMatches.length - 1];
+            } else {
+                // Bias logic: score each match
+                let highestScore = -Infinity;
+                for (const match of matchesSoFar) {
+                    const score = match.matchIndex + (match.priority * bias);
+                    if (score >= highestScore) {
+                        highestScore = score;
+                        bestMatchSoFar = match;
+                    }
+                }
+            }
+
+            // If this new best match represents a change in focus, record it as a "win"
+            if (bestMatchSoFar && bestMatchSoFar.name !== lastWinnerName) {
+                winners.push(bestMatchSoFar);
+                lastWinnerName = bestMatchSoFar.name;
+            }
+        }
         
-        // Use the actual `findBestMatch` function to get the true winner for the entire text block.
-        const bestMatch = findBestMatch(combined, tempRegexes, tempProfile, quoteRanges);
-        
-        if (bestMatch) {
-            winnerList.append(`<li><b>${bestMatch.name}</b> <small>(${bestMatch.matchKind} @${bestMatch.matchIndex}, p:${bestMatch.priority})</small></li>`);
+        if (winners.length > 0) {
+            winners.forEach(match => {
+                winnerList.append(`<li><b>${match.name}</b> <small>(${match.matchKind} @${match.matchIndex}, p:${match.priority})</small></li>`);
+            });
         } else {
             winnerList.html('<li style="color: var(--text-color-soft);">No winning match.</li>');
         }
