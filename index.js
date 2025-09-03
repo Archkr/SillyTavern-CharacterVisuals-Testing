@@ -221,7 +221,6 @@ jQuery(async () => {
     function findAllMatches(combined, regexes, settings, quoteRanges) {
         const allMatches = [];
         const { speakerRegex, attributionRegex, directActionRegex, possessiveRegex, vocativeRegex, nameRegex } = regexes;
-        // Rebalanced points for better focus detection
         const points = { speaker: 5, attribution: 4, action: 3, vocative: 2, possessive: 2, name: 0.5, "attribution (pronoun)": 4, "name (in-quote)": 0.1 };
 
         if (speakerRegex) findMatches(combined, speakerRegex, quoteRanges).forEach(m => { const name = m.groups?.[0]?.trim(); name && allMatches.push({ name, match: m.match, matchKind: "speaker", matchIndex: m.index, points: points.speaker }); });
@@ -230,7 +229,6 @@ jQuery(async () => {
         if (settings.detectVocative && vocativeRegex) findMatches(combined, vocativeRegex, quoteRanges, true).forEach(m => { const name = m.groups?.[0]?.trim(); name && allMatches.push({ name, match: m.match, matchKind: "vocative", matchIndex: m.index, points: points.vocative }); });
         if (settings.detectPossessive && possessiveRegex) findMatches(combined, possessiveRegex, quoteRanges).forEach(m => { const name = m.groups?.[0]?.trim(); name && allMatches.push({ name, match: m.match, matchKind: "possessive", matchIndex: m.index, points: points.possessive }); });
         
-        // FIX: Added logic to drastically reduce points for name mentions inside quotes.
         if (settings.detectGeneral && nameRegex) findMatches(combined, nameRegex, quoteRanges).forEach(m => { 
             const name = String(m.groups?.[0] || m.match).replace(/-(?:sama|san)$/i, "").trim(); 
             if (name) {
@@ -278,10 +276,7 @@ jQuery(async () => {
                 scores[normalizedName] = { score: 0 };
             }
     
-            // NEW: More aggressive and targeted focus stealing logic.
-            // If this is a significant action AND it's from a NEW character...
             if (match.points >= 2 && lastFocusCharacter && normalizedName !== lastFocusCharacter) {
-                // ...heavily penalize the score of the character who just lost the spotlight.
                 if (scores[lastFocusCharacter]) {
                     debugLog({ profiles: { [settings.activeProfile]: profile } }, `Focus Steal: ${normalizedName} is taking focus from ${lastFocusCharacter}. Penalizing ${lastFocusCharacter}'s score.`);
                     scores[lastFocusCharacter].score *= 0.25; 
@@ -294,7 +289,6 @@ jQuery(async () => {
     
             scores[normalizedName].score += scoreToAdd;
 
-            // If this was a significant action, update who the current focus character is.
             if (match.points >= 2) {
                 lastFocusCharacter = normalizedName;
             }
@@ -699,10 +693,11 @@ jQuery(async () => {
     _genStartHandler = (messageId) => {
         const bufKey = getBufKey(messageId);
         debugLog(settings, `Generation started for ${bufKey}, resetting state.`);
-        perMessageStates.set(bufKey, { vetoed: false, lastWinner: null, charsSinceLastProcess: 0 });
+        perMessageStates.set(bufKey, { vetoed: false, lastWinner: null });
         perMessageBuffers.delete(bufKey);
     };
 
+    // HYBRID ENGINE IMPLEMENTATION
     _streamHandler = (...args) => {
         try {
             if (!settings.enabled || settings.focusLock) return;
@@ -723,35 +718,61 @@ jQuery(async () => {
             const prev = perMessageBuffers.get(bufKey) || "";
             const currentText = prev + tokenText;
             perMessageBuffers.set(bufKey, currentText);
-
-            state.charsSinceLastProcess += tokenText.length;
-            if (state.charsSinceLastProcess < (profile.tokenProcessThreshold || PROFILE_DEFAULTS.tokenProcessThreshold)) {
-                return;
-            }
-            state.charsSinceLastProcess = 0;
-
-            const combined = currentText.slice(-(profile.maxBufferChars || PROFILE_DEFAULTS.maxBufferChars));
             ensureBufferLimit();
 
-            if (vetoRegex && vetoRegex.test(combined)) {
+            // Always check for vetoes first. This is cheap.
+            if (vetoRegex && !state.vetoed && vetoRegex.test(currentText)) {
                 debugLog(settings, "Veto phrase matched. Halting detection for this message.");
                 state.vetoed = true;
                 return;
             }
 
-            const regexes = { speakerRegex, attributionRegex, directActionRegex, possessiveRegex, vocativeRegex, nameRegex };
-            const allMatches = findAllMatches(combined, regexes, profile, getQuoteRanges(combined));
-            if (!allMatches.length) return;
+            // --- TIER 1: INSTANT CHECK (High-Confidence Speaker) ---
+            // This runs on a small, recent slice of text for performance and provides
+            // the snappy real-time feeling for script-style dialogue.
+            const recentTextForSpeaker = currentText.slice(-150);
+            if (speakerRegex) {
+                const speakerMatches = findMatches(recentTextForSpeaker, speakerRegex, [], false);
+                if (speakerMatches.length > 0) {
+                    const lastSpeakerMatch = speakerMatches[speakerMatches.length - 1];
+                    const speakerName = lastSpeakerMatch.groups?.[0]?.trim();
+                    if (speakerName && speakerName !== state.lastWinner) {
+                        debugLog(settings, "Tier 1 (Instant): Speaker detected ->", speakerName);
+                        issueCostumeForName(speakerName, { bufKey, matchKind: 'speaker' });
+                        state.lastWinner = speakerName;
+                    }
+                }
+            }
 
-            const scores = calculateCharacterFocusScores(allMatches, combined.length, profile);
-            const winner = getWinningCharacter(scores);
+            // --- TIER 2: SMART CHECK (Full Analysis at Sentence/Line End) ---
+            // This runs the full, expensive scoring model only at logical breakpoints,
+            // using the entire message buffer for maximum context and accuracy.
+            if (/[.!?]/.test(tokenText) || tokenText.includes('\n')) {
+                debugLog(settings, "Tier 2 (Smart): End of sentence/line detected. Running full analysis...");
+                
+                // Use the ENTIRE buffer for maximum accuracy.
+                const combined = currentText;
+                
+                const regexes = { speakerRegex, attributionRegex, directActionRegex, possessiveRegex, vocativeRegex, nameRegex };
+                const allMatches = findAllMatches(combined, regexes, profile, getQuoteRanges(combined));
 
-            if (winner && winner !== state.lastWinner) {
-                issueCostumeForName(winner, { bufKey });
-                state.lastWinner = winner;
+                if (!allMatches.length) {
+                    debugLog(settings, "Tier 2: No matches found in sentence analysis.");
+                    return;
+                }
+
+                const scores = calculateCharacterFocusScores(allMatches, combined.length, profile);
+                const winner = getWinningCharacter(scores);
+
+                if (winner && winner !== state.lastWinner) {
+                    debugLog(settings, `Tier 2: New winner found -> ${winner}. Previous was ${state.lastWinner || 'none'}.`);
+                    issueCostumeForName(winner, { bufKey, matchKind: 'sentence_analysis' });
+                    state.lastWinner = winner;
+                }
             }
         } catch (err) { console.error("CostumeSwitch stream handler error:", err); }
     };
+
 
     _genEndHandler = (messageId) => {
         const bufKey = getBufKey(messageId);
@@ -843,7 +864,7 @@ jQuery(async () => {
         console.error("CostumeSwitch: failed to attach event handlers:", e);
     }
     try { window[`__${extensionName}_unload`] = unload; } catch (e) {}
-    console.log("SillyTavern-CostumeSwitch v1.5.0 (Patched) loaded successfully.");
+    console.log("SillyTavern-CostumeSwitch v1.5.1 (Hybrid Engine) loaded successfully.");
 });
 
 function getSettingsObj() {
