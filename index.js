@@ -15,8 +15,7 @@ const PROFILE_DEFAULTS = {
     globalCooldownMs: 1200,
     perTriggerCooldownMs: 250,
     failedTriggerCooldownMs: 10000,
-    maxBufferChars: 2000,
-    tokenProcessThreshold: 60,
+    analysisCooldownMs: 250, // NEW: Debounce delay for smart analysis
     mappings: [],
     detectAttribution: true,
     detectAction: true,
@@ -472,8 +471,7 @@ jQuery(async () => {
         $("#cs-global-cooldown").val(profile.globalCooldownMs ?? PROFILE_DEFAULTS.globalCooldownMs);
         $("#cs-per-trigger-cooldown").val(profile.perTriggerCooldownMs ?? PROFILE_DEFAULTS.perTriggerCooldownMs);
         $("#cs-failed-trigger-cooldown").val(profile.failedTriggerCooldownMs ?? PROFILE_DEFAULTS.failedTriggerCooldownMs);
-        $("#cs-max-buffer-chars").val(profile.maxBufferChars ?? PROFILE_DEFAULTS.maxBufferChars);
-        $("#cs-token-process-threshold").val(profile.tokenProcessThreshold ?? PROFILE_DEFAULTS.tokenProcessThreshold);
+        $("#cs-analysis-cooldown").val(profile.analysisCooldownMs ?? PROFILE_DEFAULTS.analysisCooldownMs);
         $("#cs-detect-attribution").prop("checked", !!profile.detectAttribution);
         $("#cs-detect-action").prop("checked", !!profile.detectAction);
         $("#cs-detect-vocative").prop("checked", !!profile.detectVocative);
@@ -584,8 +582,7 @@ jQuery(async () => {
             globalCooldownMs: parseInt($("#cs-global-cooldown").val() || PROFILE_DEFAULTS.globalCooldownMs, 10),
             perTriggerCooldownMs: parseInt($("#cs-per-trigger-cooldown").val() || PROFILE_DEFAULTS.perTriggerCooldownMs, 10),
             failedTriggerCooldownMs: parseInt($("#cs-failed-trigger-cooldown").val() || PROFILE_DEFAULTS.failedTriggerCooldownMs, 10),
-            maxBufferChars: parseInt($("#cs-max-buffer-chars").val() || PROFILE_DEFAULTS.maxBufferChars, 10),
-            tokenProcessThreshold: parseInt($("#cs-token-process-threshold").val() || PROFILE_DEFAULTS.tokenProcessThreshold, 10),
+            analysisCooldownMs: parseInt($("#cs-analysis-cooldown").val() || PROFILE_DEFAULTS.analysisCooldownMs, 10),
             detectAttribution: !!$("#cs-detect-attribution").prop("checked"),
             detectAction: !!$("#cs-detect-action").prop("checked"),
             detectVocative: !!$("#cs-detect-vocative").prop("checked"),
@@ -693,11 +690,11 @@ jQuery(async () => {
     _genStartHandler = (messageId) => {
         const bufKey = getBufKey(messageId);
         debugLog(settings, `Generation started for ${bufKey}, resetting state.`);
-        perMessageStates.set(bufKey, { vetoed: false, lastWinner: null });
+        perMessageStates.set(bufKey, { vetoed: false, lastWinner: null, analysisTimeoutId: null });
         perMessageBuffers.delete(bufKey);
     };
 
-    // HYBRID ENGINE IMPLEMENTATION
+    // HYBRID ENGINE IMPLEMENTATION (v1.5.2 - CRASH FIX)
     _streamHandler = (...args) => {
         try {
             if (!settings.enabled || settings.focusLock) return;
@@ -720,7 +717,6 @@ jQuery(async () => {
             perMessageBuffers.set(bufKey, currentText);
             ensureBufferLimit();
 
-            // Always check for vetoes first. This is cheap.
             if (vetoRegex && !state.vetoed && vetoRegex.test(currentText)) {
                 debugLog(settings, "Veto phrase matched. Halting detection for this message.");
                 state.vetoed = true;
@@ -728,8 +724,6 @@ jQuery(async () => {
             }
 
             // --- TIER 1: INSTANT CHECK (High-Confidence Speaker) ---
-            // This runs on a small, recent slice of text for performance and provides
-            // the snappy real-time feeling for script-style dialogue.
             const recentTextForSpeaker = currentText.slice(-150);
             if (speakerRegex) {
                 const speakerMatches = findMatches(recentTextForSpeaker, speakerRegex, [], false);
@@ -740,35 +734,37 @@ jQuery(async () => {
                         debugLog(settings, "Tier 1 (Instant): Speaker detected ->", speakerName);
                         issueCostumeForName(speakerName, { bufKey, matchKind: 'speaker' });
                         state.lastWinner = speakerName;
+                        // Clear any pending smart analysis because we found a high-confidence match
+                        clearTimeout(state.analysisTimeoutId);
                     }
                 }
             }
 
-            // --- TIER 2: SMART CHECK (Full Analysis at Sentence/Line End) ---
-            // This runs the full, expensive scoring model only at logical breakpoints,
-            // using the entire message buffer for maximum context and accuracy.
+            // --- TIER 2: DEBOUNCED SMART CHECK ---
             if (/[.!?]/.test(tokenText) || tokenText.includes('\n')) {
-                debugLog(settings, "Tier 2 (Smart): End of sentence/line detected. Running full analysis...");
-                
-                // Use the ENTIRE buffer for maximum accuracy.
-                const combined = currentText;
-                
-                const regexes = { speakerRegex, attributionRegex, directActionRegex, possessiveRegex, vocativeRegex, nameRegex };
-                const allMatches = findAllMatches(combined, regexes, profile, getQuoteRanges(combined));
+                // Clear the previous timeout to reset the debounce timer
+                clearTimeout(state.analysisTimeoutId);
 
-                if (!allMatches.length) {
-                    debugLog(settings, "Tier 2: No matches found in sentence analysis.");
-                    return;
-                }
+                // Set a new timeout to run the analysis after a brief pause in streaming
+                state.analysisTimeoutId = setTimeout(() => {
+                    debugLog(settings, "Tier 2 (Smart): Debounced analysis triggered.");
+                    const fullBuffer = perMessageBuffers.get(bufKey) || "";
+                    if (!fullBuffer) return;
 
-                const scores = calculateCharacterFocusScores(allMatches, combined.length, profile);
-                const winner = getWinningCharacter(scores);
+                    const regexes = { speakerRegex, attributionRegex, directActionRegex, possessiveRegex, vocativeRegex, nameRegex };
+                    const allMatches = findAllMatches(fullBuffer, regexes, profile, getQuoteRanges(fullBuffer));
 
-                if (winner && winner !== state.lastWinner) {
-                    debugLog(settings, `Tier 2: New winner found -> ${winner}. Previous was ${state.lastWinner || 'none'}.`);
-                    issueCostumeForName(winner, { bufKey, matchKind: 'sentence_analysis' });
-                    state.lastWinner = winner;
-                }
+                    if (!allMatches.length) return;
+                    
+                    const scores = calculateCharacterFocusScores(allMatches, fullBuffer.length, profile);
+                    const winner = getWinningCharacter(scores);
+
+                    if (winner && winner !== state.lastWinner) {
+                        debugLog(settings, `Tier 2: New winner found -> ${winner}.`);
+                        issueCostumeForName(winner, { bufKey, matchKind: 'sentence_analysis' });
+                        state.lastWinner = winner;
+                    }
+                }, profile.analysisCooldownMs || PROFILE_DEFAULTS.analysisCooldownMs);
             }
         } catch (err) { console.error("CostumeSwitch stream handler error:", err); }
     };
@@ -776,6 +772,13 @@ jQuery(async () => {
 
     _genEndHandler = (messageId) => {
         const bufKey = getBufKey(messageId);
+        // Ensure any final pending analysis runs
+        const state = perMessageStates.get(bufKey);
+        if (state && state.analysisTimeoutId) {
+            clearTimeout(state.analysisTimeoutId);
+            // We could optionally trigger one last analysis here, but it might be redundant.
+            // Let's keep it simple for now.
+        }
         perMessageBuffers.delete(bufKey);
         perMessageStates.delete(bufKey);
     };
@@ -864,7 +867,7 @@ jQuery(async () => {
         console.error("CostumeSwitch: failed to attach event handlers:", e);
     }
     try { window[`__${extensionName}_unload`] = unload; } catch (e) {}
-    console.log("SillyTavern-CostumeSwitch v1.5.1 (Hybrid Engine) loaded successfully.");
+    console.log("SillyTavern-CostumeSwitch v1.5.2 (Hybrid Engine) loaded successfully.");
 });
 
 function getSettingsObj() {
