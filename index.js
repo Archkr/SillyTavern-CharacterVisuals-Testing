@@ -497,7 +497,7 @@ jQuery(async () => {
                 persistSettings();
             }
         });
-        $("#costume-switcher-settings").off('click.cs', '#cs-focus-lock-toggle').on('click.cs', '#cs-focus-lock-toggle', async () => {
+        $("#cs-focus-lock-toggle").off('click.cs').on("click.cs", async () => {
             if (settings.focusLock.character) {
                 settings.focusLock.character = null;
                 await manualReset();
@@ -546,7 +546,7 @@ jQuery(async () => {
 
     async function manualReset() {
         const profile = getActiveProfile(settings);
-        const costumeArg = profile?.defaultCostume?.trim() || '';
+        const costumeArg = profile?.defaultCostume?.trim() ? `\\${profile.defaultCostume.trim()}` : '\\';
         const command = `/costume ${costumeArg}`;
         debugLog(settings, "Attempting manual reset with command:", command);
         try {
@@ -594,7 +594,7 @@ jQuery(async () => {
             debugLog(settings, "failed-trigger cooldown active, skipping", argFolder);
             return;
         }
-        const command = `/costume ${argFolder}`;
+        const command = `/costume \\${argFolder}`;
         debugLog(settings, "executing command:", command, "kind:", matchKind, "isLock:", !!opts.isLock);
         try {
             await executeSlashCommandsOnChatInput(command);
