@@ -178,18 +178,25 @@ function findAllMatches(combined, regexes, settings, quoteRanges) {
     return settings.detectGeneral && nameRegex && findMatches(combined, nameRegex, quoteRanges).forEach(m => { const name = String(m.groups?.[0] || m.match).replace(/-(?:sama|san)$/i, "").trim(); name && allMatches.push({ name, matchKind: "name", matchIndex: m.index, priority: priorities.name }) }), allMatches
 }
 
-function findBestMatch(combined, regexes, settings, quoteRanges) {
+// v1.2.7: findBestMatch is now stateful. It accepts the last active character
+// to add a "stickiness" bonus, preventing flickers and unwanted switches.
+function findBestMatch(combined, regexes, settings, quoteRanges, lastAcceptedName) {
     if (!combined) return null;
     const allMatches = findAllMatches(combined, regexes, settings, quoteRanges);
     if (allMatches.length === 0) return null;
 
     const priorityWeight = 500; 
     const bias = Number(settings.detectionBias || 0);
+    const stickinessBonus = priorityWeight / 2; // Bonus for staying on the same character.
 
     const scoredMatches = allMatches.map(match => {
         let score = (match.priority * priorityWeight) + match.matchIndex;
         if (match.priority >= 3) {
             score += bias;
+        }
+        // Apply stickiness bonus if the detected name is the same as the last active one.
+        if (lastAcceptedName && normalizeCostumeName(match.name) === normalizeCostumeName(lastAcceptedName)) {
+            score += stickinessBonus;
         }
         return { ...match, score };
     });
@@ -408,7 +415,7 @@ jQuery(async () => {
         let lastWinnerName = null;
         for (const word of words) {
             currentBuffer += word;
-            const bestMatch = findBestMatch(currentBuffer, tempRegexes, tempProfile, quoteRanges);
+            const bestMatch = findBestMatch(currentBuffer, tempRegexes, tempProfile, quoteRanges, lastWinnerName);
             if (bestMatch && bestMatch.name !== lastWinnerName) {
                 winners.push(bestMatch);
                 lastWinnerName = bestMatch.name;
@@ -672,7 +679,7 @@ jQuery(async () => {
             }
             const quoteRanges = getQuoteRanges(combined);
             const regexes = { speakerRegex, attributionRegex, actionRegex, vocativeRegex, nameRegex };
-            const bestMatch = findBestMatch(combined, regexes, profile, quoteRanges);
+            const bestMatch = findBestMatch(combined, regexes, profile, quoteRanges, state.lastAcceptedName);
             if (bestMatch) {
                 const { name: matchedName, matchKind } = bestMatch;
                 const now = Date.now();
@@ -756,7 +763,7 @@ jQuery(async () => {
         eventSource.on(event_types.CHAT_CHANGED, _chatChangedHandler);
     } catch (e) { console.error("CostumeSwitch: failed to attach event handlers:", e); }
     try { window[`__${extensionName}_unload`] = unload; } catch (e) { }
-    console.log("SillyTavern-CostumeSwitch v1.2.6 loaded successfully.");
+    console.log("SillyTavern-CostumeSwitch v1.2.7 loaded successfully.");
 });
 
 function getSettingsObj() {
