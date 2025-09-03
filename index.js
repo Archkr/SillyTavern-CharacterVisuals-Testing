@@ -497,7 +497,7 @@ jQuery(async () => {
                 persistSettings();
             }
         });
-        $("#cs-focus-lock-toggle").off('click.cs').on("click.cs", async () => {
+        $("#costume-switcher-settings").off('click.cs', '#cs-focus-lock-toggle').on('click.cs', '#cs-focus-lock-toggle', async () => {
             if (settings.focusLock.character) {
                 settings.focusLock.character = null;
                 await manualReset();
