@@ -177,14 +177,34 @@ function findBestMatch(combined, regexes, settings, quoteRanges) {
     if (!combined) return null;
     const allMatches = findAllMatches(combined, regexes, settings, quoteRanges);
     if (allMatches.length === 0) return null;
+
+    // v1.2.4: Reworked scoring logic.
+    // The priority of a match type (e.g., speaker > action > general mention) is now the
+    // dominant factor in scoring, preventing low-priority matches (like a passive name drop)
+    // from overriding a high-priority match (like who is speaking or acting) just because
+    // it appeared later in the text.
+    const priorityWeight = 500; // This value ensures priority is more important than index.
+
     const bias = Number(settings.detectionBias || 0);
+
     const scoredMatches = allMatches.map(match => {
-        const isActive = match.priority >= 3;
-        let score = match.matchIndex;
-        if (isActive) { score += bias; }
+        // Base score is now heavily influenced by the match type's priority.
+        let score = (match.priority * priorityWeight) + match.matchIndex;
+
+        // The bias setting now fine-tunes the score for "active" matches (speaker, attribution, action).
+        if (match.priority >= 3) {
+            score += bias;
+        }
         return { ...match, score };
     });
+
+    if (scoredMatches.length === 0) return null;
+
+    // Sort by the new, more robust score in descending order.
     scoredMatches.sort((a, b) => b.score - a.score);
+    
+    debugLog(settings, 'Top matches:', scoredMatches.slice(0, 3).map(m=>`${m.name} (${m.matchKind}/${m.priority}) -> ${Math.round(m.score)}`));
+
     return scoredMatches[0];
 }
 
@@ -741,7 +761,7 @@ jQuery(async () => {
         eventSource.on(event_types.CHAT_CHANGED, _chatChangedHandler);
     } catch (e) { console.error("CostumeSwitch: failed to attach event handlers:", e); }
     try { window[`__${extensionName}_unload`] = unload; } catch (e) { }
-    console.log("SillyTavern-CostumeSwitch v1.2.3 loaded successfully.");
+    console.log("SillyTavern-CostumeSwitch v1.2.4 loaded successfully.");
 });
 
 function getSettingsObj() {
