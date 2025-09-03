@@ -461,20 +461,24 @@ jQuery(async () => {
             const newName = $("#cs-profile-name").val().trim();
             if (!newName) return;
             const oldName = settings.activeProfile;
+
             if (newName !== oldName && settings.profiles[newName]) {
                 $("#cs-error").text("A profile with that name already exists.").show();
                 return;
             }
+
             const profileData = saveCurrentProfileData();
             if (!profileData) return;
-            if (newName !== oldName) {
-                delete settings.profiles[oldName];
-            }
+            
+            // If the name is the same, it overwrites. If different, it creates a new one (Save As).
+            // The old profile is not deleted, allowing for duplication.
             settings.profiles[newName] = profileData;
             settings.activeProfile = newName;
+
             populateProfileDropdown();
             $("#cs-error").text("").hide();
             persistSettings();
+            $("#cs-status").text(`Saved profile "${newName}".`);
         });
         $("#cs-profile-delete").off('click.cs').on("click.cs", () => {
             if (Object.keys(settings.profiles).length <= 1) {
