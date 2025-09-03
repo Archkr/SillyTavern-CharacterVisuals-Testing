@@ -71,10 +71,13 @@ function normalizeCostumeName(n) {
     return s;
 }
 
+// PATCHED: Removed extra backslash from command string
 function buildCostumeCommand(folder) {
     const f = normalizeCostumeName(folder);
-    return { command: f ? `/costume \\${f}` : `/costume \\`, folderName: f };
+    // send /costume <folder> (no stray backslash). If empty, just send "/costume" to reset to main avatar.
+    return { command: f ? `/costume ${f}` : `/costume`, folderName: f };
 }
+
 
 // Quote ranges: pairs of quotes; unmatched trailing quote -> open-to-end
 function getQuoteRanges(s) {
@@ -716,6 +719,29 @@ jQuery(async () => {
     eventSource.on(event_types.GENERATION_STARTED, _genStartHandler);
     eventSource.on(event_types.GENERATION_ENDED, _genEndHandler);
     eventSource.on(event_types.CHAT_CHANGED, _chatChangedHandler);
+
+    // PATCHED: Register slash commands
+    try {
+        registerSlashCommand?.({
+            name: 'scene',
+            description: 'Switch scene (forward to engine)',
+            handler: async (args) => {
+                const argText = Array.isArray(args) ? args.join(' ') : String(args || '');
+                await executeSlashCommandsOnChatInput(`/scene ${argText}`.trim());
+            }
+        });
+        registerSlashCommand?.({
+            name: 'costume',
+            description: 'Switch costume (folder name)',
+            handler: async (args) => {
+                const argText = Array.isArray(args) ? args.join(' ') : String(args || '');
+                await executeSlashCommandsOnChatInput(argText ? `/costume ${argText}` : `/costume`);
+            }
+        });
+    } catch (e) {
+        console.warn("[CostumeSwitch] registerSlashCommand failed (ignored):", e);
+    }
+
 
     console.log("SillyTavern-CostumeSwitch v1.3.2 (Audited) loaded.");
 });
