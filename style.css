@@ -63,7 +63,7 @@
 }
 
 /* Specific table styles for better readability */
-.cs-detection-table {
+.cs-detection-table, .cs-mappings-table {
   width: 100%; 
   margin-top: 15px; 
   border-spacing: 0 12px; 
@@ -73,6 +73,12 @@
 .cs-detection-table .cs-detection-label {
   width: 35%; 
   vertical-align: top;
+}
+
+.cs-mappings-table th {
+  text-align: left;
+  padding-bottom: 10px;
+  color: var(--text-color-soft);
 }
 
 /* Live Tester Styles */
@@ -105,6 +111,26 @@
   margin: 0; 
   font-size: 0.9em;
 }
+
+/* New styles for tuning weights section for better alignment */
+.cs-tuning-weights .inline-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.cs-tuning-weights .inline-group label {
+  flex-basis: 40%;
+  flex-shrink: 0;
+  text-align: right;
+  padding-right: 10px;
+}
+.cs-tuning-weights .inline-group input {
+  flex-grow: 1;
+}
+.cs-tuning-weights .inline-group small {
+  display: none; /* Hide the small text in this flex layout to prevent wrapping */
+}
+
 
 /* Inherit font to match SillyTavern UI */
 #costume-switcher-settings .menu_button {
