@@ -1,76 +1,106 @@
-.costume-switcher-settings {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding: 5px;
+/*
+  Styles for the Costume Switcher extension settings panel.
+  This file is loaded automatically by SillyTavern.
+*/
+#costume-switcher-settings {
+  padding: 10px;
+  border-radius: 8px;
+  background-color: var(--bg1);
 }
 
-.costume-switcher-settings.inline-group {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+.cs-block {
+  margin-bottom: 20px;
+  padding: 15px;
+  border-radius: 6px;
+  background-color: var(--bg2);
+  border: 1px solid var(--border);
 }
 
-.costume-switcher-note {
-    font-size: 0.8em;
-    color: var(--text-color-secondary);
-    margin-top: 10px;
-    text-align: center;
-}
-.costume-switcher-settings input[type="text"],
-.costume-switcher-settings input[type="number"],
-.costume-switcher-settings textarea,
-.costume-switcher-settings select {
-    background-color: var(--input-background);
-    color: var(--text-color);
-    border: 1px solid var(--input-border-color);
-    border-radius: 4px;
-    padding: 4px 6px;
-    font-size: 0.9em;
-    box-shadow: none;
-    outline: none;
+#costume-switcher-settings small {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-color-soft);
+  font-size: 0.85em;
 }
 
-.costume-switcher-settings input:-webkit-autofill,
-.costume-switcher-settings textarea:-webkit-autofill {
-    background-color: var(--input-background) !important;
-    -webkit-box-shadow: 0 0 0px 1000px var(--input-background) inset !important;
-    -webkit-text-fill-color: var(--text-color) !important;
-}
-.costume-switcher-settings button {
-    background-color: var(--button-background);
-    color: var(--button-text-color);
-    border: 1px solid var(--button-border-color);
-    border-radius: 4px;
-    padding: 4px 8px;
-    font-size: 0.9em;
-    cursor: pointer;
-}
-.costume-switcher-settings button:hover {
-    background-color: var(--button-background-hover);
+.cs-tip {
+  margin-top: 10px; 
+  color: var(--text-color-soft-extra);
 }
 
-details.st-ext-card > summary {
-    -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
+.cs-flex-container {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+  align-items: center;
 }
 
-.costume-switcher-settings.inline-group > div {
-    display: flex;
-    flex-direction: column;
+.cs-status-message, .cs-error-message {
+  margin-top: 15px;
+  padding: 10px;
+  border-radius: 4px;
+  font-weight: bold;
+  border: 1px solid transparent;
 }
 
-#cs-global-cooldown,
-#cs-per-cooldown,
-#cs-failed-cooldown,
-#cs-timeout {
-    box-sizing: border-box;
-    padding: 4px 6px;
-    font-size: 0.9em;
-    border-radius: 4px;
+.cs-status-message {
+  background-color: rgba(var(--green-rgb), 0.15);
+  color: var(--green);
+  border-color: rgba(var(--green-rgb), 0.3);
 }
 
-#cs-debug {
-    margin-right: 6px;
+.cs-error-message {
+  background-color: rgba(var(--red-rgb), 0.15);
+  color: var(--red);
+  border-color: rgba(var(--red-rgb), 0.3);
+  display: none; /* Hidden by default */
 }
 
+/* Specific table styles for better readability */
+.cs-detection-table {
+  width: 100%; 
+  margin-top: 15px; 
+  border-spacing: 0 12px; 
+  border-collapse: separate;
+}
+
+.cs-detection-table .cs-detection-label {
+  width: 35%; 
+  vertical-align: top;
+}
+
+/* Live Tester Styles */
+#cs-regex-test-output-container {
+  display: flex; 
+  gap: 10px; 
+  padding: 10px; 
+  min-height: 100px; 
+  margin-top: 10px; 
+  background-color: var(--bg0);
+}
+
+.cs-test-column {
+  flex: 1;
+}
+
+.cs-test-column:first-child {
+  border-right: 1px solid var(--border); 
+  padding-right: 10px;
+}
+
+.cs-test-header {
+  font-weight: bold; 
+  margin-bottom: 5px;
+}
+
+.cs-test-list {
+  list-style-position: inside; 
+  padding: 0; 
+  margin: 0; 
+  font-size: 0.9em;
+}
+
+/* Inherit font to match SillyTavern UI */
+#costume-switcher-settings .menu_button {
+  font-family: inherit;
+}
