@@ -132,10 +132,43 @@
             </div>
           </div>
 
+          <!-- New Tuning Weights Section -->
+          <div class="inline-drawer">
+            <div class="inline-drawer-toggle inline-drawer-header">
+              <b>Tuning Weights (Power Users)</b>
+              <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+            </div>
+            <div class="inline-drawer-content">
+              <div class="cs-block cs-tuning-weights">
+                <small>Adjust the core scoring algorithm. Higher values have more impact. Change these only if you understand how they interact.</small>
+                <div class="inline-group" style="margin-top: 10px;">
+                  <label for="cs-priority-weight">Priority Weight</label>
+                  <input id="cs-priority-weight" class="text_pole" type="number" min="0" />
+                  <small>Base multiplier for match priority (e.g., Speaker vs. Action).</small>
+                </div>
+                <div class="inline-group" style="margin-top: 10px;">
+                  <label for="cs-stickiness-weight">Stickiness Weight</label>
+                  <input id="cs-stickiness-weight" class="text_pole" type="number" min="0" />
+                  <small>Bonus to prevent switching away from the current character too easily.</small>
+                </div>
+                <div class="inline-group" style="margin-top: 10px;">
+                  <label for="cs-bias-mult-high">Bias Multiplier (High Priority)</label>
+                  <input id="cs-bias-mult-high" class="text_pole" type="number" step="0.1" min="0" />
+                  <small>How much the Bias slider affects Speaker/Action/Attribution matches.</small>
+                </div>
+                <div class="inline-group" style="margin-top: 10px;">
+                  <label for="cs-bias-mult-low">Bias Multiplier (Low Priority)</label>
+                  <input id="cs-bias-mult-low" class="text_pole" type="number" step="0.1" min="0" />
+                  <small>How much the Bias slider affects Vocative/Possessive/General matches.</small>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="cs-block">
             <label for="cs-mappings"><b>Costume Mappings</b></label>
             <small>Map a detected name to a specific costume folder.</small>
-            <table id="cs-mappings" class="text_pole" style="margin-top: 10px;">
+            <table id="cs-mappings-table" class="cs-mappings-table">
               <thead><tr><th>Character Name</th><th>Costume Folder</th><th>Action</th></tr></thead>
               <tbody id="cs-mappings-tbody"></tbody>
             </table>
