@@ -761,6 +761,13 @@ function getSettingsObj() {
         storeSource[extensionName] = newSettings;
     }
     storeSource[extensionName] = Object.assign({}, structuredClone(DEFAULTS), storeSource[extensionName]);
+    
+    // FIX: Ensure focusLock is always an object to prevent runtime errors from corrupted settings.
+    if (typeof storeSource[extensionName].focusLock !== 'object' || storeSource[extensionName].focusLock === null) {
+        console.warn("[CostumeSwitch] A non-object 'focusLock' setting was detected. Resetting to default.");
+        storeSource[extensionName].focusLock = structuredClone(DEFAULTS.focusLock);
+    }
+
     for (const profileName in storeSource[extensionName].profiles) {
         storeSource[extensionName].profiles[profileName] = Object.assign({}, structuredClone(PROFILE_DEFAULTS), storeSource[extensionName].profiles[profileName]);
     }
