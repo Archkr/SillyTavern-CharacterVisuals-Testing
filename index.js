@@ -345,7 +345,7 @@ jQuery(async () => {
     
         if (winners.length > 0) {
             winners.forEach(match => {
-                winnerList.append(`<li><b>${match.name}</b> <small>(${match.matchKind} @ ${match.matchIndex}, score: ${Math.round(match.score)})</small></li>`);
+                winnerList.append(`<li><b>${match.name}</b> <small>(${match.matchKind} @ index ${match.matchIndex})</small></li>`);
             });
         } else {
             winnerList.html('<li style="color: var(--text-color-soft);">No winning match.</li>');
