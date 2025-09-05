@@ -2,7 +2,7 @@ import { extension_settings, getContext } from "../../../extensions.js";
 import { saveSettingsDebounced, event_types, eventSource } from "../../../../script.js";
 import { executeSlashCommandsOnChatInput } from "../../../slash-commands.js";
 
-const extensionName = "SillyTavern-CostumeSwitch-Testing";
+const extensionName = "SillyTavern-CostumeSwitch";
 const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
 
 const DEFAULT_ATTRIBUTION_VERBS = ["acknowledged", "added", "admitted", "advised", "affirmed", "agreed", "announced", "answered", "argued", "asked", "barked", "began", "bellowed", "blurted", "boasted", "bragged", "called", "chirped", "commanded", "commented", "complained", "conceded", "concluded", "confessed", "confirmed", "continued", "countered", "cried", "croaked", "crowed", "declared", "decreed", "demanded", "denied", "drawled", "echoed", "emphasized", "enquired", "enthused", "estimated", "exclaimed", "explained", "gasped", "insisted", "instructed", "interjected", "interrupted", "joked", "lamented", "lied", "maintained", "moaned", "mumbled", "murmured", "mused", "muttered", "nagged", "nodded", "noted", "objected", "offered", "ordered", "perked up", "pleaded", "prayed", "predicted", "proclaimed", "promised", "proposed", "protested", "queried", "questioned", "quipped", "rambled", "reasoned", "reassured", "recited", "rejoined", "remarked", "repeated", "replied", "responded", "retorted", "roared", "said", "scolded", "scoffed", "screamed", "shouted", "sighed", "snapped", "snarled", "spoke", "stammered", "stated", "stuttered", "suggested", "surmised", "tapped", "threatened", "turned", "urged", "vowed", "wailed", "warned", "whimpered", "whispered", "wondered", "yelled"];
@@ -267,6 +267,14 @@ jQuery(async () => {
     loadProfile(settings.activeProfile);
 
     function testRegexPattern() {
+        // If manual lock is on, show that in the tester instead of running detection.
+        if (settings.focusLock.character) {
+            $("#cs-test-all-detections").html(`<li style="color: var(--text-color-soft);">Detection disabled due to Manual Lock.</li>`);
+            const lockedChar = settings.focusLock.character;
+            $("#cs-test-winner-list").html(`<li><b>${lockedChar}</b> <small>(Manually Locked)</small></li>`);
+            return;
+        }
+
         $("#cs-test-veto-result").text('N/A').css('color', 'var(--text-color-soft)');
         const text = $("#cs-regex-test-input").val();
         if (!text) {
@@ -379,21 +387,25 @@ jQuery(async () => {
         return profileData;
     }
 
+    function saveActiveProfile() {
+        const profileData = saveCurrentProfileData();
+        if (profileData) {
+            settings.profiles[settings.activeProfile] = profileData;
+            recompileRegexes();
+            updateFocusLockUI();
+            persistSettings();
+            return true;
+        }
+        return false;
+    }
+
     function tryWireUI() {
         $("#cs-enable").off('change.cs').on("change.cs", function() {
             settings.enabled = !!$(this).prop("checked");
             persistSettings();
         });
 
-        $("#cs-save").off('click.cs').on("click.cs", () => {
-            const profileData = saveCurrentProfileData();
-            if(profileData) {
-                settings.profiles[settings.activeProfile] = profileData;
-                recompileRegexes();
-                updateFocusLockUI();
-                persistSettings();
-            }
-        });
+        $("#cs-save").off('click.cs').on("click.cs", saveActiveProfile);
 
         $("#cs-profile-select").off('change.cs').on("change.cs", function() {
             loadProfile($(this).val());
@@ -459,16 +471,12 @@ jQuery(async () => {
         });
 
         $("#cs-detection-bias").off('input.cs change.cs').on('input.cs', function() {
-            // Update display in real-time as slider moves
+            // Update display and re-run test in real-time as slider moves.
             $("#cs-detection-bias-value").text($(this).val());
+            testRegexPattern();
         }).on('change.cs', function() {
-            // Save when user releases the slider and automatically re-run the test
-            const profile = getActiveProfile(settings);
-            if (profile) {
-                profile.detectionBias = parseInt($(this).val(), 10);
-                persistSettings();
-                testRegexPattern(); 
-            }
+            // Save the profile when the user is done changing the value.
+            saveActiveProfile();
         });
 
         $("#cs-reset").off('click.cs').on("click.cs", async () => { await manualReset(); });
