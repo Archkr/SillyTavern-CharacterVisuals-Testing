@@ -2,15 +2,32 @@
 #costume-switcher-settings {
     padding: 10px;
     border-radius: 8px;
-    background-color: var(--bg1);
+}
+
+/* Styles the main collapsible header to match other extensions */
+#costume-switcher-settings .inline-drawer-toggle.inline-drawer-header {
+    background-color: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 15px;
+    cursor: pointer;
     display: flex;
-    flex-direction: column;
-    gap: 10px;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px; /* Space between header and content */
+}
+
+/* Adds a subtle outline to the main content area when open */
+#costume-switcher-settings .inline-drawer.is-open .inline-drawer-content {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 5px;
+    background-color: var(--bg1);
 }
 
 /* Blocks for grouping related settings */
 .cs-block {
-    margin-bottom: 20px;
+    margin: 10px;
     padding: 15px;
     border-radius: 6px;
     background-color: var(--bg2);
@@ -29,26 +46,24 @@
 .cs-flex-container {
     display: flex;
     gap: 10px;
-    margin-top: 15px;
+    margin: 15px 10px;
 }
 
 /* Status and Error message styling */
 .cs-status-message, .cs-error-message {
-    margin-top: 15px;
+    margin: 15px 10px;
     padding: 10px;
     border-radius: 4px;
     font-weight: bold;
-    border: 1px solid transparent;
+    border: 1px solid var(--border);
 }
 .cs-status-message {
     background-color: rgba(var(--green-rgb), 0.15);
     color: var(--green);
-    border-color: rgba(var(--green-rgb), 0.3);
 }
 .cs-error-message {
     background-color: rgba(var(--red-rgb), 0.15);
     color: var(--red);
-    border-color: rgba(var(--red-rgb), 0.3);
     display: none;
 }
 
@@ -76,11 +91,12 @@
     color: var(--text-color);
     border: 1px solid var(--input-border-color);
     border-radius: 4px;
-    padding: 4px 6px;
+    padding: 6px;
     font-size: 0.9em;
     box-shadow: none;
     outline: none;
     box-sizing: border-box;
+    width: 100%;
 }
 
 #costume-switcher-settings input:-webkit-autofill,
@@ -94,6 +110,7 @@
 #costume-switcher-settings .inline-group {
     display: flex;
     flex-direction: column;
+    gap: 5px;
 }
 
 /* Performance tuning visual separation */
@@ -118,7 +135,6 @@
 }
 #cs-mappings input {
     width: 100%;
-    box-sizing: border-box;
 }
 #cs-mappings button {
     width: 100%;
@@ -131,5 +147,5 @@
 #cs-test-veto-result {
     border: 1px solid transparent;
     transition: all 0.2s ease-in-out;
-    min-height: 28px; /* reserve space to prevent layout shift */
+    min-height: 28px;
 }
