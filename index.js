@@ -1,6 +1,6 @@
 import { extension_settings, getContext } from "../../../extensions.js";
 import { saveSettingsDebounced, event_types, eventSource } from "../../../../script.js";
-import { executeSlashCommandsOnChatInput } from "../../../slash-commands.js";
+import { executeSlashCommandsOnChatInput, registerSlashCommand } from "../../../slash-commands.js";
 
 const extensionName = "SillyTavern-CostumeSwitch-Testing";
 const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
@@ -30,6 +30,8 @@ const PROFILE_DEFAULTS = {
     attributionVerbs: [...DEFAULT_ATTRIBUTION_VERBS],
     actionVerbs: [...DEFAULT_ACTION_VERBS],
     detectionBias: 0,
+    sceneAnalysisEnabled: false,
+    sceneAnalysisCount: 3,
 };
 
 // Top-level settings object which contains all profiles.
@@ -77,8 +79,8 @@ function buildGenericRegex(patternList) {
 function buildNameRegex(patternList) { const e = (patternList || []).map(parsePatternEntry).filter(Boolean); if (!e.length) return null; const p = e.map(x => `(?:${x.body})`), b = `(?:^|\\n|[\\(\\[\\-—–])(?:(${p.join('|')}))(?:\\W|$)`, f = computeFlagsFromEntries(e, !0); try { return new RegExp(b, f) } catch (err) { return console.warn("buildNameRegex compile failed:", err), null } }
 function buildSpeakerRegex(patternList) { const e = (patternList || []).map(parsePatternEntry).filter(Boolean); if (!e.length) return null; const p = e.map(x => `(?:${x.body})`), b = `(?:^|\\n)\\s*(${p.join('|')})\\s*[:;,]\\s*`, f = computeFlagsFromEntries(e, !0); try { return new RegExp(b, f) } catch (err) { return console.warn("buildSpeakerRegex compile failed:", err), null } }
 function buildVocativeRegex(patternList) { const e = (patternList || []).map(parsePatternEntry).filter(Boolean); if (!e.length) return null; const p = e.map(x => `(?:${x.body})`), b = `(?:["“'\\s])(${p.join('|')})[,.!?]`, f = computeFlagsFromEntries(e, !0); try { return new RegExp(b, f) } catch (err) { return console.warn("buildVocativeRegex compile failed:", err), null } }
-function buildAttributionRegex(patternList, verbList) { const e = (patternList || []).map(parsePatternEntry).filter(Boolean); if (!e.length) return null; const n = e.map(x => `(?:${x.body})`).join("|"), v = (verbList || []).map(escapeRegex).join("|"), p = v + "(?:\\s+(?:out|back|over))?", l = "(?:\\s+[A-Z][a-z]+)*", a = `(?:["“”][^"“”]{0,400}["“”])\\s*,?\\s*(${n})${l}\\s+${p}(?:,)?`, b = `\\b(${n})${l}\\s+${p}\\s*[:,]?\\s*["“”]`, V = `(${n})${l}[’\`']s\\s+(?:[a-z]+,\\s*)?[a-z]+\\s+voice`, c = `(?:["“”][^"“”]{0,400}["“”])\\s*,?\\s*${V}`, d = `${V}[^"“]{0,25}?["“"]`, B = `(?:${a})|(?:${b})|(?:${c})|(?:${d})`, f = computeFlagsFromEntries(e, !0); try { return new RegExp(B, f) } catch (err) { return console.warn("buildAttributionRegex compile failed:", err), null } }
-function buildActionRegex(patternList, verbList) { const e = (patternList || []).map(parsePatternEntry).filter(Boolean); if (!e.length) return null; const n = e.map(x => `(?:${x.body})`).join("|"), a = (verbList || []).map(escapeRegex).join("|"), p = `\\b(${n})(?:\\s+[A-Z][a-z]+)*\\b(?:\\s+[a-zA-Z'’]+){0,4}?\\s+${a}\\b`, b = `\\b(${n})(?:\\s+[A-Z][a-z]+)*[’\`']s\\s+(?:[a-zA-Z'’]+\\s+){0,4}?[a-zA-Z'’]+\\s+${a}\\b`, c = `\\b(${n})(?:\\s+[A-Z][a-z]+)*[’\`']s\\s+(?:gaze|expression|hand|hands|feet|eyes|head|shoulders|body|figure|glance|smile|frown)`, B = `(?:${p})|(?:${b})|(?:${c})`, f = computeFlagsFromEntries(e, !0); try { return new RegExp(B, f) } catch (err) { return console.warn("buildActionRegex compile failed:", err), null } }
+function buildAttributionRegex(patternList, verbList) { const e = (patternList || []).map(parsePatternEntry).filter(Boolean); if (!e.length) return null; const n = e.map(x => `(?:${x.body})`).join("|"), v = (verbList || []).map(escapeRegex).join("|"), p = v + "(?:\\s+(?:out|back|over))?", l = "(?:\\s+(?:[A-Z]\\.?|[A-Z][a-z'-]+))+", a = `(?:["“”][^"“”]{0,400}["“”])\\s*,?\\s*(${n})${l}?\\s+${p}(?:,)?`, b = `\\b(${n})${l}?\\s+${p}\\s*[:,]?\\s*["“”]`, V = `(${n})${l}?[’\`']s\\s+(?:[a-z]+,\\s*)?[a-z]+\\s+voice`, c = `(?:["“”][^"“”]{0,400}["“”])\\s*,?\\s*${V}`, d = `${V}[^"“]{0,25}?["“"]`, B = `(?:${a})|(?:${b})|(?:${c})|(?:${d})`, f = computeFlagsFromEntries(e, !0); try { return new RegExp(B, f) } catch (err) { return console.warn("buildAttributionRegex compile failed:", err), null } }
+function buildActionRegex(patternList, verbList) { const e = (patternList || []).map(parsePatternEntry).filter(Boolean); if (!e.length) return null; const n = e.map(x => `(?:${x.body})`).join("|"), a = (verbList || []).map(escapeRegex).join("|"), l = "(?:\\s+(?:[A-Z]\\.?|[A-Z][a-z'-]+))+", p = `\\b(${n})${l}?\\b(?:\\s+[a-zA-Z'’]+){0,4}?\\s+${a}\\b`, b = `\\b(${n})${l}?[’\`']s\\s+(?:[a-zA-Z'’]+\\s+){0,4}?[a-zA-Z'’]+\\s+${a}\\b`, c = `\\b(${n})${l}?[’\`']s\\s+(?:gaze|expression|hand|hands|feet|eyes|head|shoulders|body|figure|glance|smile|frown)`, B = `(?:${p})|(?:${b})|(?:${c})`, f = computeFlagsFromEntries(e, !0); try { return new RegExp(B, f) } catch (err) { return console.warn("buildActionRegex compile failed:", err), null } }
 
 function getQuoteRanges(s) { const q=/"|\u201C|\u201D/g,pos=[],ranges=[];let m;while((m=q.exec(s))!==null)pos.push(m.index);for(let i=0;i+1<pos.length;i+=2)ranges.push([pos[i],pos[i+1]]);return ranges }
 function isIndexInsideQuotesRanges(ranges,idx){for(const[a,b]of ranges)if(idx>a&&idx<b)return!0;return!1}
@@ -120,6 +122,11 @@ function debugLog(settings,...args){try{settings&&getActiveProfile(settings)?.de
 function getActiveProfile(settings) {
     return settings?.profiles?.[settings.activeProfile];
 }
+
+// Make a global object available for other extensions to read from.
+window.costumeSwitch = {
+    sceneCharacters: [],
+};
 
 jQuery(async () => {
     if (typeof executeSlashCommandsOnChatInput !== 'function') {
@@ -228,6 +235,8 @@ jQuery(async () => {
         $("#cs-detect-general").prop("checked", !!profile.detectGeneral);
         $("#cs-attribution-verbs").val((profile.attributionVerbs || []).join(', '));
         $("#cs-action-verbs").val((profile.actionVerbs || []).join(', '));
+        $("#cs-scene-analysis-enable").prop("checked", !!profile.sceneAnalysisEnabled);
+        $("#cs-scene-analysis-count").val(profile.sceneAnalysisCount || PROFILE_DEFAULTS.sceneAnalysisCount);
         renderMappings(profile);
         recompileRegexes();
         updateFocusLockUI();
@@ -329,13 +338,14 @@ jQuery(async () => {
         winnerList.empty();
         
         const winners = [];
-        const words = combined.split(/(\s+)/);
         let currentBuffer = "";
         let lastWinnerName = null;
 
-        for (const word of words) {
-            currentBuffer += word;
-            const bestMatch = findBestMatch(currentBuffer, tempRegexes, tempProfile, quoteRanges);
+        // NEW LOOP: Iterate character by character to perfectly simulate the live handler.
+        for (let i = 0; i < combined.length; i++) {
+            currentBuffer += combined[i];
+            const currentQuoteRanges = getQuoteRanges(currentBuffer);
+            const bestMatch = findBestMatch(currentBuffer, tempRegexes, tempProfile, currentQuoteRanges);
 
             if (bestMatch && bestMatch.name !== lastWinnerName) {
                 winners.push(bestMatch);
@@ -375,7 +385,9 @@ jQuery(async () => {
             detectGeneral: !!$("#cs-detect-general").prop("checked"),
             attributionVerbs: $("#cs-attribution-verbs").val().split(',').map(s => s.trim()).filter(Boolean),
             actionVerbs: $("#cs-action-verbs").val().split(',').map(s => s.trim()).filter(Boolean),
-            mappings: []
+            mappings: [],
+            sceneAnalysisEnabled: !!$("#cs-scene-analysis-enable").prop("checked"),
+            sceneAnalysisCount: parseInt($("#cs-scene-analysis-count").val() || PROFILE_DEFAULTS.sceneAnalysisCount, 10),
         };
         const newMaps = [];
         $("#cs-mappings-tbody tr").each(function () {
@@ -502,6 +514,17 @@ jQuery(async () => {
         $(document).off('click.cs', '#cs-regex-test-button').on('click.cs', '#cs-regex-test-button', testRegexPattern);
     }
     tryWireUI();
+
+    registerSlashCommand("scenechars",
+        () => {
+            const chars = window.costumeSwitch.sceneCharacters;
+            console.log("[CostumeSwitch] Current Scene Characters:", chars);
+            toastr.info(`Current Scene Characters:<br>${chars.join(', ')}`, "Scene Characters");
+        },
+        [],
+        "Displays the characters detected by the last Scene Analysis.",
+        true
+    );
 
     async function manualReset() {
         const profile = getActiveProfile(settings);
@@ -637,9 +660,63 @@ jQuery(async () => {
         } catch (err) { console.error("CostumeSwitch stream handler error:", err); }
     };
 
-    _genEndHandler = (messageId) => { if (messageId != null) { perMessageBuffers.delete(`m${messageId}`); perMessageStates.delete(`m${messageId}`); } };
-    _msgRecvHandler = (messageId) => { if (messageId != null) { perMessageBuffers.delete(`m${messageId}`); perMessageStates.delete(`m${messageId}`); } };
-    _chatChangedHandler = () => { perMessageBuffers.clear(); perMessageStates.clear(); lastIssuedCostume = null; lastTriggerTimes.clear(); failedTriggerTimes.clear(); };
+    function analyzeScene(fullText) {
+        const profile = getActiveProfile(settings);
+        if (!profile || !profile.sceneAnalysisEnabled || !fullText) {
+            window.costumeSwitch.sceneCharacters = [];
+            return;
+        }
+
+        const regexes = { speakerRegex, attributionRegex, actionRegex, vocativeRegex, nameRegex };
+        const allMatches = findAllMatches(fullText, regexes, profile, getQuoteRanges(fullText));
+        
+        const scores = allMatches.reduce((acc, match) => {
+            const name = normalizeCostumeName(match.name);
+            if (!acc[name]) acc[name] = 0;
+            // Score is based on priority, giving more weight to active roles.
+            acc[name] += match.priority; 
+            return acc;
+        }, {});
+        
+        const ranked = Object.entries(scores).sort(([, scoreA], [, scoreB]) => scoreB - scoreA);
+        const topN = ranked.slice(0, profile.sceneAnalysisCount).map(([name]) => name);
+
+        window.costumeSwitch.sceneCharacters = topN;
+        debugLog(settings, 'Scene Analysis complete. Top characters:', topN);
+    }
+
+    _genEndHandler = (messageId) => { 
+        const bufKey = messageId != null ? `m${messageId}` : 'live';
+        const fullText = perMessageBuffers.get(bufKey);
+        
+        try {
+            if (fullText) {
+                analyzeScene(fullText);
+            }
+        } catch (err) {
+            console.error("[CostumeSwitch] Scene analysis failed:", err);
+        } finally {
+            if (messageId != null) { 
+                perMessageBuffers.delete(bufKey); 
+                perMessageStates.delete(bufKey); 
+            }
+        }
+    };
+    _msgRecvHandler = (messageId) => { 
+        if (messageId != null) { 
+            const bufKey = `m${messageId}`;
+            perMessageBuffers.delete(bufKey); 
+            perMessageStates.delete(bufKey); 
+        } 
+    };
+    _chatChangedHandler = () => { 
+        perMessageBuffers.clear(); 
+        perMessageStates.clear(); 
+        lastIssuedCostume = null; 
+        lastTriggerTimes.clear(); 
+        failedTriggerTimes.clear(); 
+        window.costumeSwitch.sceneCharacters = [];
+    };
 
     function unload() {
         try { if (eventSource) { eventSource.off?.(streamEventName, _streamHandler); eventSource.off?.(event_types.GENERATION_STARTED, _genStartHandler); eventSource.off?.(event_types.GENERATION_ENDED, _genEndHandler); eventSource.off?.(event_types.MESSAGE_RECEIVED, _msgRecvHandler); eventSource.off?.(event_types.CHAT_CHANGED, _chatChangedHandler); } } catch (e) {}
