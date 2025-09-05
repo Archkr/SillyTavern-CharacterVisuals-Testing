@@ -96,16 +96,40 @@
     flex-direction: column;
 }
 
-/* Note style, not currently used in HTML but kept for completeness */
-.costume-switcher-note {
-    font-size: 0.8em;
-    color: var(--text-color-secondary);
+/* Performance tuning visual separation */
+.cs-block .inline-group + .inline-group {
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
     margin-top: 10px;
-    text-align: center;
 }
 
-/* Fix for details summary font smoothing */
-details.st-ext-card > summary {
-    -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
+/* Mappings Table Styling */
+#cs-mappings {
+    width: 100%;
+    border-collapse: collapse;
+}
+#cs-mappings th, #cs-mappings td {
+    border: 1px solid var(--border);
+    padding: 8px;
+    text-align: left;
+}
+#cs-mappings th {
+    background-color: var(--bg0);
+}
+#cs-mappings input {
+    width: 100%;
+    box-sizing: border-box;
+}
+#cs-mappings button {
+    width: 100%;
+}
+
+/* Live Tester output styling */
+#cs-regex-test-output-container {
+    border: 1px solid var(--border);
+}
+#cs-test-veto-result {
+    border: 1px solid transparent;
+    transition: all 0.2s ease-in-out;
+    min-height: 28px; /* reserve space to prevent layout shift */
 }
