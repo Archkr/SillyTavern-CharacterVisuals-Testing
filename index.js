@@ -128,6 +128,9 @@ function ensureBufferLimit(){if(!(perMessageBuffers.size<=MAX_MESSAGE_BUFFERS)){
 
 // --- MAIN SCRIPT LOGIC ---
 jQuery(async () => {
+    // Inject the stylesheet for the settings panel
+    $('head').append(`<link rel="stylesheet" type="text/css" href="${extensionFolderPath}/style.css">`);
+
     if (typeof executeSlashCommandsOnChatInput !== 'function') {
         console.error(`${logPrefix} FATAL: 'executeSlashCommandsOnChatInput' is not available.`);
         return;
@@ -404,13 +407,27 @@ jQuery(async () => {
             }},
             '#cs-reset': { on: 'click', handler: async () => { await manualReset(); }},
             '#cs-mapping-add': { on: 'click', handler: () => { const profile = getActiveProfile(settings); if (profile) { profile.mappings = profile.mappings || []; profile.mappings.push({ name: "", folder: "" }); renderMappings(profile); }}},
-            '#cs-mappings-tbody': { on: 'click', delegate: '.map-remove', handler: function() { const profile = getActiveProfile(settings); if (profile) { const idx = parseInt($(this).closest('tr').attr('data-idx'), 10); if (!isNaN(idx)) { profile.mappings.splice(idx, 1); renderMappings(profile); }}}},
+            // **FIXED MAPPING REMOVAL**
+            '#cs-mappings-tbody': { on: 'click', delegate: '.map-remove', handler: function() {
+                const profile = getActiveProfile(settings);
+                if (profile) {
+                    const idx = parseInt($(this).closest('tr').attr('data-idx'), 10);
+                    if (!isNaN(idx)) {
+                        profile.mappings.splice(idx, 1);
+                        renderMappings(profile);
+                    }
+                }
+            }},
             '#cs-regex-test-button': { on: 'click', handler: testRegexPattern },
         };
         for(const selector in UIEvents) {
             const { on, handler, delegate } = UIEvents[selector];
-            if (delegate) { $(document).off(on, selector).on(on, selector, delegate, handler); }
-            else { $(document).off(on, selector).on(on, selector, handler); }
+            // **CORRECTED EVENT DELEGATION LOGIC**
+            if (delegate) {
+                $(document).off(on, `${selector} ${delegate}`).on(on, `${selector} ${delegate}`, handler);
+            } else {
+                $(document).off(on, selector).on(on, selector, handler);
+            }
         }
     }
 
