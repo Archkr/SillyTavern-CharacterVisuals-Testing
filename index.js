@@ -7,6 +7,30 @@ const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
 const logPrefix = "[CostumeSwitch 2.0]";
 
 // ======================================================================
+// UTILITY: NOTIFICATION WRAPPER
+// ======================================================================
+
+/**
+ * A wrapper for callPopup that respects a user setting to disable notifications.
+ * @param {string} message The HTML message to display.
+ * @param {string} type The type of popup ('success', 'error', 'info').
+ * @param {number} duration Duration in milliseconds for the popup to be visible.
+ */
+function showNotification(message, type, duration = 2000) {
+    const profile = getActiveProfile();
+    // Use the callPopup function only if notifications are not disabled in the current profile
+    if (profile && profile.disableNotifications) {
+        // If notifications are disabled, we can log to console for debugging if needed
+        if (profile.debug) {
+            console.log(`${logPrefix} [Notification Suppressed] ${type}: ${message.replace(/<[^>]*>?/gm, '')}`);
+        }
+        return;
+    }
+    callPopup(message, type, duration);
+}
+
+
+// ======================================================================
 // CONSTANTS
 // ======================================================================
 const MAX_MESSAGE_BUFFERS = 60;
@@ -20,6 +44,7 @@ const PROFILE_DEFAULTS = {
     vetoPatterns: ["OOC:", "(OOC)"],
     defaultCostume: "",
     debug: false,
+    disableNotifications: false, // NEW SETTING
     globalCooldownMs: 1200,
     perTriggerCooldownMs: 250,
     failedTriggerCooldownMs: 10000,
@@ -333,11 +358,11 @@ async function issueCostumeForName(name, opts = {}) {
             state.activeRoster.set(cleanName, profile.sceneRosterTTL ?? PROFILE_DEFAULTS.sceneRosterTTL);
         }
 
-        callPopup(`Switched to <b>${argFolder}</b>`, 'success', 2000);
+        showNotification(`Switched to <b>${argFolder}</b>`, 'success', 2000);
 
     } catch (err) {
         state.failedTriggerTimes.set(argFolder, now);
-        callPopup(`Failed to switch to costume "<b>${argFolder}</b>". Check console (F12).`, 'error', 5000);
+        showNotification(`Failed to switch to costume "<b>${argFolder}</b>". Check console (F12).`, 'error', 5000);
         console.error(`${logPrefix} Failed to execute /costume command for "${argFolder}".`, err);
     }
 }
@@ -352,6 +377,7 @@ const uiMapping = {
     vetoPatterns: { selector: '#cs-veto-patterns', type: 'textarea' },
     defaultCostume: { selector: '#cs-default', type: 'text' },
     debug: { selector: '#cs-debug', type: 'checkbox' },
+    disableNotifications: { selector: '#cs-disable-notifications', type: 'checkbox' }, // NEW MAPPING
     globalCooldownMs: { selector: '#cs-global-cooldown', type: 'number' },
     repeatSuppressMs: { selector: '#cs-repeat-suppress', type: 'number' },
     tokenProcessThreshold: { selector: '#cs-token-process-threshold', type: 'number' },
@@ -488,15 +514,15 @@ function testRegexPattern() {
 }
 
 function wireUI() {
-    $(document).on('change', '#cs-enable', function() { settings.enabled = $(this).prop("checked"); saveSettings(); callPopup(`Costume Switcher ${settings.enabled ? 'Enabled' : 'Disabled'}.`); });
-    $(document).on('click', '#cs-save', () => { const d = saveCurrentProfileData(); if(d){ settings.profiles[settings.activeProfile] = d; recompileRegexes(); updateFocusLockUI(); saveSettings(); callPopup(`Profile "<b>${settings.activeProfile}</b>" saved.`, 'success'); }});
+    $(document).on('change', '#cs-enable', function() { settings.enabled = $(this).prop("checked"); saveSettings(); showNotification(`Costume Switcher ${settings.enabled ? 'Enabled' : 'Disabled'}.`, 'info'); });
+    $(document).on('click', '#cs-save', () => { const d = saveCurrentProfileData(); if(d){ settings.profiles[settings.activeProfile] = d; recompileRegexes(); updateFocusLockUI(); saveSettings(); showNotification(`Profile "<b>${settings.activeProfile}</b>" saved.`, 'success'); }});
     $(document).on('change', '#cs-profile-select', function() { loadProfileUI($(this).val()); });
-    $(document).on('click', '#cs-profile-save', () => { const n = $("#cs-profile-name").val().trim(); if (!n) return; const o = settings.activeProfile, d = saveCurrentProfileData(); if(!d) return; if (n !== o) delete settings.profiles[o]; settings.profiles[n] = d; settings.activeProfile = n; populateProfileDropdown(); saveSettings(); callPopup(`Profile saved as "<b>${n}</b>".`, 'success'); });
-    $(document).on('click', '#cs-profile-delete', () => { if (Object.keys(settings.profiles).length <= 1) { callPopup("Cannot delete the last profile.", 'error'); return; } const n = settings.activeProfile; if (confirm(`Delete profile "${n}"?`)) { delete settings.profiles[n]; settings.activeProfile = Object.keys(settings.profiles)[0]; populateProfileDropdown(); loadProfileUI(settings.activeProfile); saveSettings(); callPopup(`Deleted "<b>${n}</b>".`, 'success'); } });
-    $(document).on('click', '#cs-profile-export', () => { const p = getActiveProfile(), n = settings.activeProfile, d = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ name: n, data: p }, null, 2)), a = document.createElement('a'); a.href = d; a.download = `${n}_costume_profile.json`; a.click(); a.remove(); callPopup("Profile exported.", 'success'); });
+    $(document).on('click', '#cs-profile-save', () => { const n = $("#cs-profile-name").val().trim(); if (!n) return; const o = settings.activeProfile, d = saveCurrentProfileData(); if(!d) return; if (n !== o) delete settings.profiles[o]; settings.profiles[n] = d; settings.activeProfile = n; populateProfileDropdown(); saveSettings(); showNotification(`Profile saved as "<b>${n}</b>".`, 'success'); });
+    $(document).on('click', '#cs-profile-delete', () => { if (Object.keys(settings.profiles).length <= 1) { showNotification("Cannot delete the last profile.", 'error'); return; } const n = settings.activeProfile; if (confirm(`Delete profile "${n}"?`)) { delete settings.profiles[n]; settings.activeProfile = Object.keys(settings.profiles)[0]; populateProfileDropdown(); loadProfileUI(settings.activeProfile); saveSettings(); showNotification(`Deleted "<b>${n}</b>".`, 'success'); } });
+    $(document).on('click', '#cs-profile-export', () => { const p = getActiveProfile(), n = settings.activeProfile, d = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ name: n, data: p }, null, 2)), a = document.createElement('a'); a.href = d; a.download = `${n}_costume_profile.json`; a.click(); a.remove(); showNotification("Profile exported.", 'success'); });
     $(document).on('click', '#cs-profile-import', () => { $('#cs-profile-file-input').click(); });
-    $(document).on('change', '#cs-profile-file-input', function(e) { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = (evt) => { try { const c = JSON.parse(evt.target.result); if (!c.name || !c.data) throw new Error("Invalid format."); let n = c.name; if (settings.profiles[n]) n = `${n} (Imported)`; settings.profiles[n] = Object.assign({}, structuredClone(PROFILE_DEFAULTS), c.data); settings.activeProfile = n; populateProfileDropdown(); loadProfileUI(n); saveSettings(); callPopup(`Imported as "<b>${n}</b>".`, 'success'); } catch (err) { callPopup(`Import failed: ${err.message}`, 'error'); } }; r.readAsText(f); $(this).val(''); });
-    $(document).on('click', '#cs-focus-lock-toggle', async () => { if (settings.focusLock.character) { settings.focusLock.character = null; callPopup('Focus lock released.', 'success'); } else { const c = $("#cs-focus-lock-select").val(); if (c) { settings.focusLock.character = c; await issueCostumeForName(c, { isLock: true }); } } updateFocusLockUI(); saveSettings(); });
+    $(document).on('change', '#cs-profile-file-input', function(e) { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = (evt) => { try { const c = JSON.parse(evt.target.result); if (!c.name || !c.data) throw new Error("Invalid format."); let n = c.name; if (settings.profiles[n]) n = `${n} (Imported)`; settings.profiles[n] = Object.assign({}, structuredClone(PROFILE_DEFAULTS), c.data); settings.activeProfile = n; populateProfileDropdown(); loadProfileUI(n); saveSettings(); showNotification(`Imported as "<b>${n}</b>".`, 'success', 3000); } catch (err) { showNotification(`Import failed: ${err.message}`, 'error', 5000); } }; r.readAsText(f); $(this).val(''); });
+    $(document).on('click', '#cs-focus-lock-toggle', async () => { if (settings.focusLock.character) { settings.focusLock.character = null; showNotification('Focus lock released.', 'success'); } else { const c = $("#cs-focus-lock-select").val(); if (c) { settings.focusLock.character = c; await issueCostumeForName(c, { isLock: true }); } } updateFocusLockUI(); saveSettings(); });
     $(document).on('input change', '#cs-detection-bias', function(e) { $("#cs-detection-bias-value").text($(this).val()); if (e.type === 'change') { const p = getActiveProfile(); if (p) { p.detectionBias = parseInt($(this).val(), 10); saveSettings(); testRegexPattern(); } } });
     $(document).on('click', '#cs-reset', async () => { const p = getActiveProfile(), a = p?.defaultCostume?.trim() ? `\\${p.defaultCostume.trim()}` : '\\'; await executeSlashCommandsOnChatInput(`/costume ${a}`); });
     $(document).on('click', '#cs-mapping-add', () => { const p = getActiveProfile(); if (p) { p.mappings = p.mappings || []; p.mappings.push({ name: "", folder: "" }); renderMappings(p); } });
@@ -517,9 +543,9 @@ function registerCommands() {
                 profile.patterns.push(charName);
                 recompileRegexes();
                 loadProfileUI(settings.activeProfile);
-                callPopup(`Added "<b>${charName}</b>" to patterns for this session.`, 'success');
+                showNotification(`Added "<b>${charName}</b>" to patterns for this session.`, 'success');
             } else {
-                callPopup(`"<b>${charName}</b>" is already in the pattern list.`, 'info');
+                showNotification(`"<b>${charName}</b>" is already in the pattern list.`, 'info');
             }
         }
     }, true);
@@ -532,9 +558,9 @@ function registerCommands() {
                 profile.ignorePatterns.push(charName);
                 recompileRegexes();
                 loadProfileUI(settings.activeProfile);
-                callPopup(`Ignoring "<b>${charName}</b>" for this session.`, 'success');
+                showNotification(`Ignoring "<b>${charName}</b>" for this session.`, 'success');
             } else {
-                callPopup(`"<b>${charName}</b>" is already on the ignore list.`, 'info');
+                showNotification(`"<b>${charName}</b>" is already on the ignore list.`, 'info');
             }
         }
     }, true);
@@ -549,9 +575,9 @@ function registerCommands() {
             profile.mappings = profile.mappings.filter(m => m.name.toLowerCase() !== name.toLowerCase());
             profile.mappings.push({ name, folder });
             loadProfileUI(settings.activeProfile);
-            callPopup(`Mapped "<b>${name}</b>" to "<b>${folder}</b>" for this session.`, 'success');
+            showNotification(`Mapped "<b>${name}</b>" to "<b>${folder}</b>" for this session.`, 'success');
         } else {
-            callPopup("Invalid map format. Use: /cs-map [alias] to [folder]", 'error');
+            showNotification("Invalid map format. Use: /cs-map [alias] to [folder]", 'error', 3000);
         }
     }, true);
 }
@@ -643,5 +669,5 @@ jQuery(async() => {
     load();
     
     window[`__${extensionName}_unload`] = unload;
-    console.log(`${logPrefix} v2.0.1 (Combined) loaded successfully.`);
+    console.log(`${logPrefix} v2.0.2 (Combined) loaded successfully.`);
 });
