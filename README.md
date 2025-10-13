@@ -2,23 +2,21 @@
 
 **Costume Switcher** is a powerful extension for SillyTavern that brings your multi-character scenes to life. It intelligently and automatically changes the displayed character avatar in real-time as the AI generates its response, creating a dynamic, narrative-driven experience.
 
-Instead of being limited to a single character avatar, Costume Switcher analyzes the story as it's written and ensures the correct character is always on-screen.
+Instead of being limited to a single character avatar, Costume Switcher analyzes the story as it's written and ensures the correct character is always on-screen, making it perfect for single-card narrator or ensemble cast roleplays.
 
 ## Table of Contents
 
 -   [How It Works](#how-it-works)
 -   [Key Features](#key-features)
+-   [Prerequisites](#prerequisites)
 -   [Installation](#installation)
 -   [Quick Start Guide](#quick-start-guide)
 -   [Detailed Feature Guide](#detailed-feature-guide)
-    -   [Intelligent Narrative Detection](#intelligent-narrative-detection)
-    -   [Scene Awareness (Scene Roster)](#scene-awareness-scene-roster)
-    -   [On-the-Fly Slash Commands](#on-the-fly-slash-commands)
-    -   [Profile Management](#profile-management)
-    -   [Live Pattern Tester](#live-pattern-tester)
 -   [Complete Guide to Settings](#complete-guide-to-settings)
 -   [Tips & Best Practices](#tips--best-practices)
+-   [Recommended Extensions](#recommended-extensions)
 -   [Troubleshooting](#troubleshooting)
+
 
 ## How It Works
 
@@ -34,23 +32,24 @@ The **Detection Bias** slider in the settings lets you fine-tune the balance bet
 ## Key Features
 
 * **Intelligent Narrative Detection:** The core of the extension. It doesn't just look for simple `Name:` tags; it understands the flow and context of a story.
-* **Scene Awareness:** An optional mode that dramatically improves accuracy in group chats by maintaining a "roster" of recently active characters.
+* **Scene Awareness:** An optional mode that dramatically improves accuracy in scenes with multiple characters by maintaining a "roster" of recently active participants.
 * **On-the-Fly Slash Commands:** Manage your character list without ever leaving the chat for quick additions or adjustments.
 * **Advanced Profile Management:** Create, save, and switch between different configurations for various scenarios. Import and export profiles to share your setups.
 * **Live Pattern Tester:** An indispensable tool to test your settings in real-time and understand the engine's logic.
 * **Performance Tuning:** Fine-tune cooldowns and thresholds to match your preferences and system performance.
 * **Costume Mapping:** Map multiple names or regular expressions to a single costume folder.
 
-# Installation
+## Prerequisites
 
-### Prerequisites
+* **SillyTavern Version:** It is recommended to use the **latest version** of SillyTavern (either Release or Staging).
+* **Streaming must be enabled:** This extension relies on analyzing the AI's response as it's being generated. You **must** have streaming enabled in your chosen API's settings for it to function.
 
-It is recommended to use the **latest version** of SillyTavern (either Release or Staging) along with Google Chrome.
-### Installation Steps
-1. **Install Costume Switcher**: In the **SillyTavern Extension Manager**, use "Install from URL" and paste the following Git URL:
-   ```
-   https://github.com/archkrrr/SillyTavern-CostumeSwitch
-   ```
+## Installation
+
+1.  **Install Costume Switcher**: In the **SillyTavern Extension Manager**, use "Install from URL" and paste the following Git URL:
+    ```
+    https://github.com/archkrrr/SillyTavern-CostumeSwitch
+    ```
 
 ## Quick Start Guide
 
@@ -61,7 +60,7 @@ For the best experience right out of the box, follow this simple setup guide.
     * `[x] Detect Attribution`
     * `[x] Detect Action`
     * `[x] Detect Pronoun`
-3.  **Enable Group Chat Mode (If Needed):** If you have 3+ characters, also enable:
+3.  **Improve Multi-Character Accuracy (If Needed):** If your scenes frequently involve 3+ characters, also enable:
     * `[x] Enable Scene Roster`
 4.  **Save Profile:** Give your configuration a name at the top and click **Save**. You're ready to go!
 
@@ -95,7 +94,7 @@ This is the engine of the extension. By enabling different methods, you can cont
 
 * **Detect Possessive**
     * **What it is:** Detects when a character's possessive form is used.
-    * **Example:** `Her eyes widened in surprise.` -> If "Merlin" is a character, and the last active character was female, this might incorrectly switch. However, `Merlin's eyes widened...` will correctly switch to `Merlin`.
+    * **Example:** `Her eyes widened in surprise.` -> This is a weaker detection and may not always trigger a switch unless no better match is found. However, `Merlin's eyes widened...` will correctly switch to `Merlin`.
 
 * **Detect General Mentions**
     * **What it is:** The broadest and most dangerous method. It will trigger a switch any time a character's name is mentioned anywhere. Use with caution, as it can lead to flickering.
@@ -103,9 +102,9 @@ This is the engine of the extension. By enabling different methods, you can cont
 
 ### Scene Awareness (Scene Roster)
 
-This feature is designed to fix the most common problem in group chats: an old character mention causing an incorrect switch.
+This feature is designed to fix the most common problem in complex, multi-character scenes: an old character mention causing an incorrect switch.
 
-When enabled, the extension maintains a temporary "roster" of characters who have been mentioned recently. The `Scene Roster TTL (messages)` setting determines how many messages a character stays on the roster without being mentioned before they are dropped. The detection engine will then *strongly* prioritize characters on this roster, improving accuracy in active, multi-person conversations.
+When enabled, the extension maintains a temporary "roster" of characters who have been mentioned recently. The `Scene Roster TTL (messages)` setting determines how many messages a character stays on the roster without being mentioned before they are dropped. The detection engine will then *strongly* prioritize characters on this roster, improving accuracy in active conversations with many participants.
 
 ### On-the-Fly Slash Commands
 
@@ -156,7 +155,7 @@ This is your primary diagnostic tool. Paste any block of text into the tester an
 
 -   **Detection Methods:** See the [Detailed Feature Guide](#detailed-feature-guide) above for a full explanation of each method.
 
--   **Enable Scene Roster:** Toggles the Scene Awareness feature for group chats.
+-   **Enable Scene Roster:** Toggles the Scene Awareness feature for scenes with many characters.
     -   **Scene Roster TTL (messages):** Sets how many messages a character remains "active" in the scene before being dropped from the priority roster.
 
 -   **Attribution / Action Verbs:** Comma-separated lists of verbs used by the "Detect Attribution" and "Detect Action" methods. You can add or remove verbs to fine-tune detection.
@@ -178,18 +177,31 @@ This is your primary diagnostic tool. Paste any block of text into the tester an
 -   **Order Your Patterns:** When listing names in Character Patterns, always list longer names before shorter names that are part of them (e.g., list 'Bartholomew' before 'Bart').
 -   **Use the Live Tester:** Before asking for help, paste your text into the Live Pattern Tester. It will often show you exactly why a switch did or didn't happen. It's also the best way to test and perfect your regular expressions.
 -   **Start with Recommended Settings:** For most novel-style roleplays, the recommended detection settings (`Attribution`, `Action`, `Pronoun`) provide the best balance of accuracy and performance. Only enable other methods if you have a specific need.
+-   **Turn off "Request model reasoning":** If you are using a model that supports a "thinking" or "reasoning" phase, it is highly recommended to **disable** the "Request model reasoning" option in SillyTavern's settings. The model's internal thoughts may contain character names that will cause the extension to switch costumes prematurely before the actual response is written.
 -   **Be Wary of "General Mentions":** This detection method is powerful but can easily cause incorrect switches in complex sentences. Only use it if you understand its behavior.
+
+## Recommended Extensions
+
+These extensions work well alongside Costume Switcher to enhance your storytelling experience.
+
+* **[Moonlit Echoes Theme]**: A brief description of what this extension does and why it's a good companion.
+    ```
+    https://github.com/RivelleDays/SillyTavern-MoonlitEchoesTheme
+    ```
+* **[Extension Name Placeholder]**: A brief description of what this extension does and why it's a good companion.
+    * [GitHub Link Placeholder]
 
 ## Troubleshooting
 
 -   **Switches aren't happening at all:**
-    1.  Is "Enable Costume Switch" checked?
-    2.  Are your character names spelled correctly in "Character Patterns"?
-    3.  Is at least one "Detection Method" enabled?
-    4.  Could a "Veto Phrase" be present in the message?
+    1.  **Is Streaming enabled in your API settings?** This is the most common issue. The extension requires streaming to work.
+    2.  Is "Enable Costume Switch" checked in the extension settings?
+    3.  Are your character names spelled correctly in "Character Patterns"?
+    4.  Is at least one "Detection Method" enabled?
+    5.  Could a "Veto Phrase" be present in the message?
 
 -   **The wrong character is being selected:**
     1.  Paste the full message into the "Live Pattern Tester" to see the engine's logic.
     2.  Try adjusting the "Detection Bias" slider. A more positive bias will help if older dialogue tags are being ignored in favor of recent name drops.
-    3.  If it's a group chat, enable the "Scene Roster".
+    3.  For scenes with many active characters, enable the "Scene Roster".
     4.  Check if an overly broad detection method like "General Mentions" is enabled.
