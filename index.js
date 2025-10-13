@@ -674,20 +674,18 @@ function registerCommands() {
         const topCharacters = analyzeMessageForTopCharacters(lastAiMessage.mes);
         const resultString = topCharacters.slice(0, numChars).join(', ');
 
-        // Copy to clipboard
-        const textArea = document.createElement("textarea");
-        textArea.value = resultString;
-        document.body.appendChild(textArea);
-        textArea.select();
-        document.execCommand("copy");
-        document.body.removeChild(textArea);
+        const chatInput = document.getElementById('send_textarea');
+        if (chatInput) {
+            chatInput.value = resultString;
+            chatInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
         
         if (resultString) {
-            showStatus(`Analysis complete. Copied "<b>${resultString}</b>" to clipboard.`, 'success', 4000);
+            showStatus(`Analysis complete. Pasted "<b>${resultString}</b>" into chat input.`, 'success', 4000);
         } else {
             showStatus("No characters found in the last message.", 'info');
         }
-    }, ["number_of_chars"], "Analyzes the last AI message and copies a comma-separated list of top characters to the clipboard.", false); // Set to false to make it visible in the command list
+    }, ["number_of_chars"], "Analyzes the last AI message and puts a comma-separated list of top characters into the chat input.", false);
 }
 
 // ======================================================================
