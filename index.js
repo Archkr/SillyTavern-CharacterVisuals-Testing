@@ -674,7 +674,7 @@ function registerCommands() {
         const topCharacters = analyzeMessageForTopCharacters(lastAiMessage.mes);
         const resultString = topCharacters.slice(0, numChars).join(', ');
 
-        context.setVariable('cs_top_characters', resultString);
+        setVariable('cs_top_characters', resultString);
         
         if (resultString) {
             showStatus(`Analysis complete. Set {{cs_top_characters}} to "<b>${resultString}</b>".`, 'success', 4000);
