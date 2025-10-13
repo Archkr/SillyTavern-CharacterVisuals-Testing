@@ -1,5 +1,5 @@
 import { extension_settings, getContext } from "../../../extensions.js";
-import { saveSettingsDebounced, event_types, eventSource, callPopup } from "../../../../script.js";
+import { saveSettingsDebounced, event_types, eventSource } from "../../../../script.js";
 import { executeSlashCommandsOnChatInput, registerSlashCommand } from "../../../slash-commands.js";
 
 const extensionName = "SillyTavern-CostumeSwitch-Testing";
@@ -7,30 +7,38 @@ const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
 const logPrefix = "[CostumeSwitch 2.0]";
 
 // ======================================================================
-// UTILITY: NOTIFICATION WRAPPER
+// UTILITY: STATUS MESSAGE HANDLER
 // ======================================================================
+let statusTimeout;
 
 /**
- * A wrapper for callPopup that respects a user setting to disable notifications.
+ * Displays a message in the status bar at the bottom of the settings panel.
+ * This is a self-contained system and does not use callPopup.
  * @param {string} message The HTML message to display.
- * @param {string} type The type of popup ('success', 'error', 'info').
- * @param {number} duration Duration in milliseconds for the popup to be visible.
+ * @param {string} type 'success', 'info', or 'error'.
+ * @param {number} duration Duration in milliseconds. 0 for a persistent message.
  */
-function showNotification(message, type, duration = 2000) {
-    const profile = getActiveProfile();
-    // Use the callPopup function only if notifications are not disabled in the current profile
-    if (profile && profile.disableNotifications) {
-        // If notifications are disabled, we can log to console for debugging if needed
-        if (profile.debug) {
-            console.log(`${logPrefix} [Notification Suppressed] ${type}: ${message.replace(/<[^>]*>?/gm, '')}`);
-        }
-        return;
-    }
-    // By passing an options object with an empty buttons array, 
-    // we ensure it's treated as a toast notification, not a confirmation dialog.
-    callPopup(message, type, { duration: duration, buttons: [] });
-}
+function showStatus(message, type = 'success', duration = 3000) {
+    clearTimeout(statusTimeout);
+    const statusEl = $('#cs-status');
+    const errorEl = $('#cs-error');
 
+    // Reset both elements
+    statusEl.hide();
+    errorEl.hide();
+
+    if (type === 'error') {
+        errorEl.html(message).show();
+        // Don't set a timeout for errors, they should be cleared by the next status update.
+    } else { // 'success' or 'info'
+        statusEl.html(message).show();
+        if (duration > 0) {
+            statusTimeout = setTimeout(() => {
+                statusEl.html('Ready');
+            }, duration);
+        }
+    }
+}
 
 // ======================================================================
 // CONSTANTS
@@ -46,7 +54,6 @@ const PROFILE_DEFAULTS = {
     vetoPatterns: ["OOC:", "(OOC)"],
     defaultCostume: "",
     debug: false,
-    disableNotifications: false, // NEW SETTING
     globalCooldownMs: 1200,
     perTriggerCooldownMs: 250,
     failedTriggerCooldownMs: 10000,
@@ -242,9 +249,9 @@ function recompileRegexes() {
             nameRegex: buildNameRegex(effectivePatterns),
             vetoRegex: buildGenericRegex(profile.vetoPatterns),
         };
-        $('#cs-error').text("").hide();
+        showStatus('Ready', 'info', 0);
     } catch (e) {
-        $('#cs-error').text(`Pattern compile error: ${String(e)}`).show();
+        showStatus(`Pattern compile error: ${String(e)}`, 'error');
     }
 }
 
@@ -326,26 +333,26 @@ async function issueCostumeForName(name, opts = {}) {
     const currentCostume = normalizeStreamText(state.lastIssuedCostume || profile.defaultCostume || (context?.characters?.[context.characterId]?.name) || '', { isCostumeName: true });
     
     if (!opts.isLock && currentCostume?.toLowerCase() === argFolder.toLowerCase()) {
-        console.debug(`${logPrefix} Already using costume for "${argFolder}" - skipping.`);
+        if (profile.debug) console.debug(`${logPrefix} Already using costume for "${argFolder}" - skipping.`);
         return;
     }
     if (!opts.isLock && now - state.lastSwitchTimestamp < (profile.globalCooldownMs ?? PROFILE_DEFAULTS.globalCooldownMs)) {
-        console.debug(`${logPrefix} Global cooldown active, skipping switch to "${argFolder}".`);
+        if (profile.debug) console.debug(`${logPrefix} Global cooldown active, skipping switch to "${argFolder}".`);
         return;
     }
     if (!opts.isLock) {
         const lastSuccess = state.lastTriggerTimes.get(argFolder) || 0;
         if (now - lastSuccess < (profile.perTriggerCooldownMs ?? PROFILE_DEFAULTS.perTriggerCooldownMs)) {
-            console.debug(`${logPrefix} Per-trigger cooldown active for "${argFolder}".`); return;
+            if (profile.debug) console.debug(`${logPrefix} Per-trigger cooldown active for "${argFolder}".`); return;
         }
         const lastFailed = state.failedTriggerTimes.get(argFolder) || 0;
         if (now - lastFailed < (profile.failedTriggerCooldownMs ?? PROFILE_DEFAULTS.failedTriggerCooldownMs)) {
-            console.debug(`${logPrefix} Failed-trigger cooldown active for "${argFolder}".`); return;
+            if (profile.debug) console.debug(`${logPrefix} Failed-trigger cooldown active for "${argFolder}".`); return;
         }
     }
 
     const command = `/costume \\${argFolder}`;
-    console.debug(`${logPrefix} executing command:`, command, "kind:", opts.matchKind || 'manual', "isLock:", !!opts.isLock);
+    if (profile.debug) console.log(`${logPrefix} executing command:`, command, "kind:", opts.matchKind || 'manual', "isLock:", !!opts.isLock);
 
     try {
         await executeSlashCommandsOnChatInput(command);
@@ -360,11 +367,11 @@ async function issueCostumeForName(name, opts = {}) {
             state.activeRoster.set(cleanName, profile.sceneRosterTTL ?? PROFILE_DEFAULTS.sceneRosterTTL);
         }
 
-        showNotification(`Switched to <b>${argFolder}</b>`, 'success', 2000);
+        showStatus(`Switched to <b>${argFolder}</b>`, 'success');
 
     } catch (err) {
         state.failedTriggerTimes.set(argFolder, now);
-        showNotification(`Failed to switch to costume "<b>${argFolder}</b>". Check console (F12).`, 'error', 5000);
+        showStatus(`Failed to switch to costume "<b>${argFolder}</b>". Check console (F12).`, 'error');
         console.error(`${logPrefix} Failed to execute /costume command for "${argFolder}".`, err);
     }
 }
@@ -379,7 +386,6 @@ const uiMapping = {
     vetoPatterns: { selector: '#cs-veto-patterns', type: 'textarea' },
     defaultCostume: { selector: '#cs-default', type: 'text' },
     debug: { selector: '#cs-debug', type: 'checkbox' },
-    disableNotifications: { selector: '#cs-disable-notifications', type: 'checkbox' }, // NEW MAPPING
     globalCooldownMs: { selector: '#cs-global-cooldown', type: 'number' },
     repeatSuppressMs: { selector: '#cs-repeat-suppress', type: 'number' },
     tokenProcessThreshold: { selector: '#cs-token-process-threshold', type: 'number' },
@@ -516,15 +522,15 @@ function testRegexPattern() {
 }
 
 function wireUI() {
-    $(document).on('change', '#cs-enable', function() { settings.enabled = $(this).prop("checked"); saveSettings(); showNotification(`Costume Switcher ${settings.enabled ? 'Enabled' : 'Disabled'}.`, 'info'); });
-    $(document).on('click', '#cs-save', () => { const d = saveCurrentProfileData(); if(d){ settings.profiles[settings.activeProfile] = d; recompileRegexes(); updateFocusLockUI(); saveSettings(); showNotification(`Profile "<b>${settings.activeProfile}</b>" saved.`, 'success'); }});
+    $(document).on('change', '#cs-enable', function() { settings.enabled = $(this).prop("checked"); saveSettings(); showStatus(`Costume Switcher ${settings.enabled ? 'Enabled' : 'Disabled'}.`, 'info'); });
+    $(document).on('click', '#cs-save', () => { const d = saveCurrentProfileData(); if(d){ settings.profiles[settings.activeProfile] = d; recompileRegexes(); updateFocusLockUI(); saveSettings(); showStatus(`Profile "<b>${settings.activeProfile}</b>" saved.`, 'success'); }});
     $(document).on('change', '#cs-profile-select', function() { loadProfileUI($(this).val()); });
-    $(document).on('click', '#cs-profile-save', () => { const n = $("#cs-profile-name").val().trim(); if (!n) return; const o = settings.activeProfile, d = saveCurrentProfileData(); if(!d) return; if (n !== o) delete settings.profiles[o]; settings.profiles[n] = d; settings.activeProfile = n; populateProfileDropdown(); saveSettings(); showNotification(`Profile saved as "<b>${n}</b>".`, 'success'); });
-    $(document).on('click', '#cs-profile-delete', () => { if (Object.keys(settings.profiles).length <= 1) { showNotification("Cannot delete the last profile.", 'error'); return; } const n = settings.activeProfile; if (confirm(`Delete profile "${n}"?`)) { delete settings.profiles[n]; settings.activeProfile = Object.keys(settings.profiles)[0]; populateProfileDropdown(); loadProfileUI(settings.activeProfile); saveSettings(); showNotification(`Deleted "<b>${n}</b>".`, 'success'); } });
-    $(document).on('click', '#cs-profile-export', () => { const p = getActiveProfile(), n = settings.activeProfile, d = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ name: n, data: p }, null, 2)), a = document.createElement('a'); a.href = d; a.download = `${n}_costume_profile.json`; a.click(); a.remove(); showNotification("Profile exported.", 'success'); });
+    $(document).on('click', '#cs-profile-save', () => { const n = $("#cs-profile-name").val().trim(); if (!n) return; const o = settings.activeProfile, d = saveCurrentProfileData(); if(!d) return; if (n !== o) delete settings.profiles[o]; settings.profiles[n] = d; settings.activeProfile = n; populateProfileDropdown(); saveSettings(); showStatus(`Profile saved as "<b>${n}</b>".`, 'success'); });
+    $(document).on('click', '#cs-profile-delete', () => { if (Object.keys(settings.profiles).length <= 1) { showStatus("Cannot delete the last profile.", 'error'); return; } const n = settings.activeProfile; if (confirm(`Delete profile "${n}"?`)) { delete settings.profiles[n]; settings.activeProfile = Object.keys(settings.profiles)[0]; populateProfileDropdown(); loadProfileUI(settings.activeProfile); saveSettings(); showStatus(`Deleted "<b>${n}</b>".`, 'success'); } });
+    $(document).on('click', '#cs-profile-export', () => { const p = getActiveProfile(), n = settings.activeProfile, d = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ name: n, data: p }, null, 2)), a = document.createElement('a'); a.href = d; a.download = `${n}_costume_profile.json`; a.click(); a.remove(); showStatus("Profile exported.", 'success'); });
     $(document).on('click', '#cs-profile-import', () => { $('#cs-profile-file-input').click(); });
-    $(document).on('change', '#cs-profile-file-input', function(e) { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = (evt) => { try { const c = JSON.parse(evt.target.result); if (!c.name || !c.data) throw new Error("Invalid format."); let n = c.name; if (settings.profiles[n]) n = `${n} (Imported)`; settings.profiles[n] = Object.assign({}, structuredClone(PROFILE_DEFAULTS), c.data); settings.activeProfile = n; populateProfileDropdown(); loadProfileUI(n); saveSettings(); showNotification(`Imported as "<b>${n}</b>".`, 'success', 3000); } catch (err) { showNotification(`Import failed: ${err.message}`, 'error', 5000); } }; r.readAsText(f); $(this).val(''); });
-    $(document).on('click', '#cs-focus-lock-toggle', async () => { if (settings.focusLock.character) { settings.focusLock.character = null; showNotification('Focus lock released.', 'success'); } else { const c = $("#cs-focus-lock-select").val(); if (c) { settings.focusLock.character = c; await issueCostumeForName(c, { isLock: true }); } } updateFocusLockUI(); saveSettings(); });
+    $(document).on('change', '#cs-profile-file-input', function(e) { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = (evt) => { try { const c = JSON.parse(evt.target.result); if (!c.name || !c.data) throw new Error("Invalid format."); let n = c.name; if (settings.profiles[n]) n = `${n} (Imported)`; settings.profiles[n] = Object.assign({}, structuredClone(PROFILE_DEFAULTS), c.data); settings.activeProfile = n; populateProfileDropdown(); loadProfileUI(n); saveSettings(); showStatus(`Imported as "<b>${n}</b>".`, 'success', 3000); } catch (err) { showStatus(`Import failed: ${err.message}`, 'error'); } }; r.readAsText(f); $(this).val(''); });
+    $(document).on('click', '#cs-focus-lock-toggle', async () => { if (settings.focusLock.character) { settings.focusLock.character = null; showStatus('Focus lock released.', 'success'); } else { const c = $("#cs-focus-lock-select").val(); if (c) { settings.focusLock.character = c; await issueCostumeForName(c, { isLock: true }); } } updateFocusLockUI(); saveSettings(); });
     $(document).on('input change', '#cs-detection-bias', function(e) { $("#cs-detection-bias-value").text($(this).val()); if (e.type === 'change') { const p = getActiveProfile(); if (p) { p.detectionBias = parseInt($(this).val(), 10); saveSettings(); testRegexPattern(); } } });
     $(document).on('click', '#cs-reset', async () => { const p = getActiveProfile(), a = p?.defaultCostume?.trim() ? `\\${p.defaultCostume.trim()}` : '\\'; await executeSlashCommandsOnChatInput(`/costume ${a}`); });
     $(document).on('click', '#cs-mapping-add', () => { const p = getActiveProfile(); if (p) { p.mappings = p.mappings || []; p.mappings.push({ name: "", folder: "" }); renderMappings(p); } });
@@ -545,9 +551,9 @@ function registerCommands() {
                 profile.patterns.push(charName);
                 recompileRegexes();
                 loadProfileUI(settings.activeProfile);
-                showNotification(`Added "<b>${charName}</b>" to patterns for this session.`, 'success');
+                showStatus(`Added "<b>${charName}</b>" to patterns for this session.`, 'success');
             } else {
-                showNotification(`"<b>${charName}</b>" is already in the pattern list.`, 'info');
+                showStatus(`"<b>${charName}</b>" is already in the pattern list.`, 'info');
             }
         }
     }, true);
@@ -560,9 +566,9 @@ function registerCommands() {
                 profile.ignorePatterns.push(charName);
                 recompileRegexes();
                 loadProfileUI(settings.activeProfile);
-                showNotification(`Ignoring "<b>${charName}</b>" for this session.`, 'success');
+                showStatus(`Ignoring "<b>${charName}</b>" for this session.`, 'success');
             } else {
-                showNotification(`"<b>${charName}</b>" is already on the ignore list.`, 'info');
+                showStatus(`"<b>${charName}</b>" is already on the ignore list.`, 'info');
             }
         }
     }, true);
@@ -577,9 +583,9 @@ function registerCommands() {
             profile.mappings = profile.mappings.filter(m => m.name.toLowerCase() !== name.toLowerCase());
             profile.mappings.push({ name, folder });
             loadProfileUI(settings.activeProfile);
-            showNotification(`Mapped "<b>${name}</b>" to "<b>${folder}</b>" for this session.`, 'success');
+            showStatus(`Mapped "<b>${name}</b>" to "<b>${folder}</b>" for this session.`, 'success');
         } else {
-            showNotification("Invalid map format. Use: /cs-map [alias] to [folder]", 'error', 3000);
+            showStatus("Invalid map format. Use: /cs-map [alias] to [folder]", 'error', 3000);
         }
     }, true);
 }
@@ -662,7 +668,6 @@ jQuery(async() => {
     }
 
     loadSettings();
-    recompileRegexes();
     $("#cs-enable").prop("checked", !!settings.enabled);
     populateProfileDropdown();
     loadProfileUI(settings.activeProfile);
@@ -671,5 +676,5 @@ jQuery(async() => {
     load();
     
     window[`__${extensionName}_unload`] = unload;
-    console.log(`${logPrefix} v2.0.3 (Combined) loaded successfully.`);
+    console.log(`${logPrefix} v2.0.4 (Combined) loaded successfully.`);
 });
