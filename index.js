@@ -494,17 +494,20 @@ function testRegexPattern() {
     }
     const tempProfile = saveCurrentProfileData();
     const originalProfile = getActiveProfile();
+    // Temporarily apply the current UI settings for the test
     settings.profiles[settings.activeProfile] = tempProfile;
     recompileRegexes();
 
     const combined = normalizeStreamText(text);
 
+    // 1. Veto Check (same as before)
     if (compiledRegexes.vetoRegex && compiledRegexes.vetoRegex.test(combined)) {
         $("#cs-test-veto-result").html(`Vetoed by: <b style="color: var(--red);">${combined.match(compiledRegexes.vetoRegex)[0]}</b>`);
     } else {
         $("#cs-test-veto-result").text('No veto phrases matched.').css('color', 'var(--green)');
     }
 
+    // 2. All Detections (same as before)
     const allMatches = findAllMatches(combined);
     allMatches.sort((a, b) => a.index - b.index);
     const allDetectionsList = $("#cs-test-all-detections").empty();
@@ -514,9 +517,29 @@ function testRegexPattern() {
         allDetectionsList.html('<li class="cs-tester-list-placeholder">No detections.</li>');
     }
     
-    const winner = findBestMatch(combined);
-    $("#cs-test-winner-list").empty().html(winner ? `<li><b>${winner.name}</b> <small>(${winner.kind} @ ${winner.index}, score: ${Math.round(winner.score)})</small></li>` : '<li class="cs-tester-list-placeholder">No winning match.</li>');
+    // 3. **CORRECTED** Winning Detections Logic
+    const winnerList = $("#cs-test-winner-list").empty();
+    const winners = [];
+    const words = combined.split(/(\s+)/); // Split by whitespace, keeping the spaces
+    let currentBuffer = "";
+    let lastWinnerName = null;
 
+    for (const word of words) {
+        currentBuffer += word;
+        const bestMatch = findBestMatch(currentBuffer);
+        if (bestMatch && bestMatch.name !== lastWinnerName) {
+            winners.push(bestMatch);
+            lastWinnerName = bestMatch.name;
+        }
+    }
+
+    if (winners.length > 0) {
+        winners.forEach(m => winnerList.append(`<li><b>${m.name}</b> <small>(${m.kind} @ ${m.index}, score: ${Math.round(m.score)})</small></li>`));
+    } else {
+        winnerList.html('<li class="cs-tester-list-placeholder">No winning match.</li>');
+    }
+
+    // Restore the original profile settings
     settings.profiles[settings.activeProfile] = originalProfile;
     recompileRegexes();
 }
