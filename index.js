@@ -1,5 +1,5 @@
 import { extension_settings, getContext } from "../../../extensions.js";
-import { saveSettingsDebounced, event_types, eventSource, setVariable } from "../../../../script.js";
+import { saveSettingsDebounced, event_types, eventSource } from "../../../../script.js";
 import { executeSlashCommandsOnChatInput, registerSlashCommand } from "../../../slash-commands.js";
 
 const extensionName = "SillyTavern-CostumeSwitch-Testing";
@@ -674,7 +674,7 @@ function registerCommands() {
         const topCharacters = analyzeMessageForTopCharacters(lastAiMessage.mes);
         const resultString = topCharacters.slice(0, numChars).join(', ');
 
-        setVariable('cs_top_characters', resultString);
+        context.setVariable('cs_top_characters', resultString);
         
         if (resultString) {
             showStatus(`Analysis complete. Set {{cs_top_characters}} to "<b>${resultString}</b>".`, 'success', 4000);
