@@ -306,36 +306,6 @@ async function issueCostumeForName(name, opts = {}) {
 }
 
 // ======================================================================
-// NEW: POST-MESSAGE ANALYSIS LOGIC
-// ======================================================================
-/**
- * Analyzes a block of text and returns a ranked list of the most prominent characters.
- * @param {string} messageText The full text of the message to analyze.
- * @returns {string[]} An array of character names, sorted by prominence.
- */
-function analyzeMessageForTopCharacters(messageText) {
-    const allMatches = findAllMatches(messageText);
-    if (!allMatches || allMatches.length === 0) {
-        return [];
-    }
-
-    const scores = {};
-    allMatches.forEach(match => {
-        if (!scores[match.name]) {
-            scores[match.name] = 0;
-        }
-        // Score is priority + 1 to give value to general mentions (priority 0)
-        scores[match.name] += (match.priority + 1);
-    });
-
-    // Sort the characters by their score in descending order
-    const sortedCharacters = Object.keys(scores).sort((a, b) => scores[b] - scores[a]);
-    
-    return sortedCharacters;
-}
-
-
-// ======================================================================
 // UI MANAGEMENT
 // ======================================================================
 const uiMapping = {
@@ -657,35 +627,6 @@ function registerCommands() {
             showStatus(`Mapped "<b>${alias}</b>" to "<b>${folder}</b>" for this session.`, 'success');
         }
     }, ["alias", "to", "folder"], "Maps a character alias to a costume folder for this session. Use 'to' to separate.", true);
-
-    // NEW SLASH COMMAND
-    registerSlashCommand("cs-analyze", (args) => {
-        const numChars = parseInt(args[0], 10) || 3; // Default to top 3 characters
-        const context = getContext();
-        
-        // Find the last message that is not from the user
-        const lastAiMessage = context.chat.slice().reverse().find(msg => !msg.is_user);
-
-        if (!lastAiMessage) {
-            showStatus("No AI message found to analyze.", 'error');
-            return;
-        }
-
-        const topCharacters = analyzeMessageForTopCharacters(lastAiMessage.mes);
-        const resultString = topCharacters.slice(0, numChars).join(', ');
-
-        const chatInput = document.getElementById('send_textarea');
-        if (chatInput) {
-            chatInput.value = resultString;
-            chatInput.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-        
-        if (resultString) {
-            showStatus(`Analysis complete. Pasted "<b>${resultString}</b>" into chat input.`, 'success', 4000);
-        } else {
-            showStatus("No characters found in the last message.", 'info');
-        }
-    }, ["number_of_chars"], "Analyzes the last AI message and puts a comma-separated list of top characters into the chat input.", false);
 }
 
 // ======================================================================
