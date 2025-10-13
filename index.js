@@ -26,7 +26,9 @@ function showNotification(message, type, duration = 2000) {
         }
         return;
     }
-    callPopup(message, type, duration);
+    // By passing an options object with an empty buttons array, 
+    // we ensure it's treated as a toast notification, not a confirmation dialog.
+    callPopup(message, type, { duration: duration, buttons: [] });
 }
 
 
@@ -669,5 +671,5 @@ jQuery(async() => {
     load();
     
     window[`__${extensionName}_unload`] = unload;
-    console.log(`${logPrefix} v2.0.2 (Combined) loaded successfully.`);
+    console.log(`${logPrefix} v2.0.3 (Combined) loaded successfully.`);
 });
