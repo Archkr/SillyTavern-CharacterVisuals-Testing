@@ -41,25 +41,16 @@ The **Detection Bias** slider in the settings lets you fine-tune the balance bet
 * **Performance Tuning:** Fine-tune cooldowns and thresholds to match your preferences and system performance.
 * **Costume Mapping:** Map multiple names or regular expressions to a single costume folder.
 
-## Installation
+# Installation
 
-### Method 1: Easy Install (Recommended)
+### Prerequisites
 
-1.  **Download:** Get the `.zip` file of the latest release from this repository's "Releases" page.
-2.  **Install:** Open SillyTavern, go to the Extensions panel (plug icon), and drag and drop the `.zip` file onto the installation area. The extension will install automatically.
-
-### Method 2: Manual Install
-
-For users who prefer to install manually or are using a cloned version of the repository.
-
-1.  **Download:** Download or clone the repository files.
-2.  **Locate Folder:** Navigate to your SillyTavern installation directory.
-3.  **Place Files:** Place all the extension files into the following sub-folder:
-    `public/scripts/extensions/third-party/SillyTavern-CostumeSwitch-Testing/`
-    *(You may need to create the `SillyTavern-CostumeSwitch-Testing` folder yourself).*
-4.  **Restart:** Restart SillyTavern to ensure the extension is loaded correctly.
-
-*This extension requires a modern version of SillyTavern (v1.13.2+ recommended).*
+It is recommended to use the **latest version** of SillyTavern (either Release or Staging) along with Google Chrome.
+### Installation Steps
+1. **Install Costume Switcher**: In the **SillyTavern Extension Manager**, use "Install from URL" and paste the following Git URL:
+   ```
+   https://github.com/archkrrr/SillyTavern-CostumeSwitch
+   ```
 
 ## Quick Start Guide
 
