@@ -1,10 +1,59 @@
-import { extension_settings, getContext } from "../../../extensions.js";
+\import { extension_settings, getContext } from "../../../extensions.js";
 import { saveSettingsDebounced, event_types, eventSource } from "../../../../script.js";
 import { executeSlashCommandsOnChatInput, registerSlashCommand } from "../../../slash-commands.js";
 
-const extensionName = "SillyTavern-CostumeSwitch-Testing";
+const extensionName = "SillyTavern-CostumeSwitch";
 const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
 const logPrefix = "[CostumeSwitch]";
+
+// ======================================================================
+// PRESET PROFILES
+// ======================================================================
+const PRESETS = {
+    'novel': {
+        name: "Novel Style (Recommended)",
+        description: "A balanced setting for narrative or story-based roleplay. Excels at detecting speakers from dialogue and actions.",
+        settings: {
+            detectAttribution: true,
+            detectAction: true,
+            detectVocative: false,
+            detectPossessive: true,
+            detectPronoun: true,
+            detectGeneral: false,
+            enableSceneRoster: true,
+            detectionBias: 0,
+        },
+    },
+    'script': {
+        name: "Script / Chat Mode",
+        description: "A simple, highly accurate mode for chats that use a clear `Name: \"Dialogue\"` format. Disables complex narrative detection.",
+        settings: {
+            detectAttribution: false,
+            detectAction: false,
+            detectVocative: false,
+            detectPossessive: false,
+            detectPronoun: false,
+            detectGeneral: false,
+            enableSceneRoster: false,
+            detectionBias: 100,
+        },
+    },
+    'group': {
+        name: "Group Chat / Ensemble Cast",
+        description: "Optimized for chaotic scenes with many characters. Uses the Scene Roster to prioritize recently active participants.",
+        settings: {
+            detectAttribution: true,
+            detectAction: true,
+            detectVocative: true,
+            detectPossessive: true,
+            detectPronoun: true,
+            detectGeneral: false,
+            enableSceneRoster: true,
+            detectionBias: -20,
+        },
+    },
+};
+
 
 // ======================================================================
 // DEFAULT SETTINGS
@@ -54,6 +103,7 @@ const state = {
     failedTriggerTimes: new Map(),
     perMessageBuffers: new Map(),
     perMessageStates: new Map(),
+    messageStats: new Map(), // For statistical logging
     eventHandlers: {},
     compiledRegexes: {},
 };
@@ -184,10 +234,19 @@ function findAllMatches(combined) {
     return allMatches;
 }
 
-function findBestMatch(combined) {
+function findBestMatch(combined, bufKey) {
     const profile = getActiveProfile();
     const allMatches = findAllMatches(combined);
     if (allMatches.length === 0) return null;
+
+    // Update stats with all detections found in this pass
+    if (bufKey && state.messageStats.has(bufKey)) {
+        const stats = state.messageStats.get(bufKey);
+        allMatches.forEach(m => {
+            const name = normalizeCostumeName(m.name);
+            stats.set(name, (stats.get(name) || 0) + 1);
+        });
+    }
 
     if (profile.enableSceneRoster) {
         const msgState = Array.from(state.perMessageStates.values()).pop();
@@ -339,6 +398,16 @@ function populateProfileDropdown() {
     });
     select.val(settings.activeProfile);
 }
+
+function populatePresetDropdown() {
+    const select = $("#cs-preset-select");
+    select.empty().append($('<option>', { value: '', text: 'Select a preset...' }));
+    for (const key in PRESETS) {
+        select.append($('<option>', { value: key, text: PRESETS[key].name }));
+    }
+    $("#cs-preset-description").text("Load a recommended configuration into the current profile.");
+}
+
 
 function updateFocusLockUI() {
     const profile = getActiveProfile();
@@ -558,6 +627,29 @@ function wireUI() {
         reader.readAsText(file);
         $(this).val('');
     });
+    $(document).on('change', '#cs-preset-select', function() {
+        const presetKey = $(this).val();
+        const descriptionEl = $("#cs-preset-description");
+        if (presetKey && PRESETS[presetKey]) {
+            descriptionEl.text(PRESETS[presetKey].description);
+        } else {
+            descriptionEl.text("Load a recommended configuration into the current profile.");
+        }
+    });
+    $(document).on('click', '#cs-preset-load', () => {
+        const presetKey = $("#cs-preset-select").val();
+        if (!presetKey) {
+            showStatus("Please select a preset first.", 'error');
+            return;
+        }
+        const preset = PRESETS[presetKey];
+        if (confirm(`This will apply the "${preset.name}" preset to your current profile ("${settings.activeProfile}").\n\nYour other settings like character patterns and mappings will be kept. Continue?`)) {
+            const currentProfile = getActiveProfile();
+            Object.assign(currentProfile, preset.settings);
+            loadProfile(settings.activeProfile); // Reload UI to show changes
+            persistSettings(`"${preset.name}" preset loaded.`);
+        }
+    });
     $(document).on('click', '#cs-focus-lock-toggle', async () => {
         if (settings.focusLock.character) {
             settings.focusLock.character = null;
@@ -580,6 +672,8 @@ function wireUI() {
         }
     });
     $(document).on('click', '#cs-regex-test-button', testRegexPattern);
+    $(document).on('click', '#cs-stats-log', logLastMessageStats);
+
 }
 
 async function manualReset() {
@@ -596,6 +690,34 @@ async function manualReset() {
         console.error(`${logPrefix} Manual reset failed.`, err);
     }
 }
+
+function logLastMessageStats() {
+    const lastMessageId = Array.from(state.messageStats.keys()).pop();
+    if (!lastMessageId || !state.messageStats.has(lastMessageId)) {
+        showStatus("No stats recorded for the last message.", "info");
+        console.log(`${logPrefix} No stats recorded for the last message.`);
+        return;
+    }
+    const stats = state.messageStats.get(lastMessageId);
+    if (stats.size === 0) {
+        showStatus("No character mentions were detected in the last message.", "info");
+        console.log(`${logPrefix} No character mentions were detected in the last message.`);
+        return;
+    }
+
+    let logOutput = "Character Mention Stats for Last Message:\n";
+    logOutput += "========================================\n";
+    const sortedStats = Array.from(stats.entries()).sort((a, b) => b[1] - a[1]);
+    sortedStats.forEach(([name, count]) => {
+        logOutput += `- ${name}: ${count} mentions\n`;
+    });
+    logOutput += "========================================";
+
+    console.log(logOutput);
+    showStatus("Last message stats logged to browser console (F12).", "success");
+    // Future integration: Could send `logOutput` to the Notebook extension here.
+}
+
 
 // ======================================================================
 // SLASH COMMANDS
@@ -627,6 +749,10 @@ function registerCommands() {
             showStatus(`Mapped "<b>${alias}</b>" to "<b>${folder}</b>" for this session.`, 'success');
         }
     }, ["alias", "to", "folder"], "Maps a character alias to a costume folder for this session. Use 'to' to separate.", true);
+    
+    registerSlashCommand("cs-stats", () => {
+        logLastMessageStats();
+    }, [], "Logs mention statistics for the last generated message to the console.", true);
 }
 
 // ======================================================================
@@ -636,6 +762,9 @@ const handleGenerationStart = (messageId) => {
     const bufKey = messageId != null ? `m${messageId}` : 'live';
     debugLog(`Generation started for ${bufKey}, resetting state.`);
     
+    // Initialize stats for the new message
+    state.messageStats.set(bufKey, new Map());
+
     const profile = getActiveProfile();
     const oldState = state.perMessageStates.size > 0 ? Array.from(state.perMessageStates.values()).pop() : null;
     
@@ -691,7 +820,7 @@ const handleStream = (...args) => {
             msgState.vetoed = true; return;
         }
 
-        const bestMatch = findBestMatch(combined);
+        const bestMatch = findBestMatch(combined, bufKey);
 
         if (bestMatch) {
             const { name: matchedName, matchKind } = bestMatch;
@@ -722,8 +851,14 @@ const handleStream = (...args) => {
     } catch (err) { console.error(`${logPrefix} stream handler error:`, err); }
 };
 
-const cleanupMessageState = (messageId) => { if (messageId != null) { state.perMessageBuffers.delete(`m${messageId}`); }};
-const resetGlobalState = () => { Object.assign(state, { lastIssuedCostume: null, lastSwitchTimestamp: 0, lastTriggerTimes: new Map(), failedTriggerTimes: new Map(), perMessageBuffers: new Map(), perMessageStates: new Map() }); };
+const cleanupMessageState = (messageId) => { 
+    if (messageId != null) { 
+        state.perMessageBuffers.delete(`m${messageId}`); 
+        // Keep stats in state.messageStats until next generation starts
+    }
+};
+
+const resetGlobalState = () => { Object.assign(state, { lastIssuedCostume: null, lastSwitchTimestamp: 0, lastTriggerTimes: new Map(), failedTriggerTimes: new Map(), perMessageBuffers: new Map(), perMessageStates: new Map(), messageStats: new Map() }); };
 
 function load() {
     state.eventHandlers = {
@@ -780,13 +915,14 @@ jQuery(async () => {
         $("#extensions_settings").append(settingsHtml);
 
         populateProfileDropdown();
+        populatePresetDropdown();
         loadProfile(getSettings().activeProfile);
         wireUI();
         registerCommands();
         load();
         
         window[`__${extensionName}_unload`] = unload;
-        console.log(`${logPrefix} v2.0.5 (Combined) loaded successfully.`);
+        console.log(`${logPrefix} v2.1.0 loaded successfully.`);
     } catch (error) {
         console.error(`${logPrefix} failed to initialize:`, error);
         alert(`Failed to initialize Costume Switcher. Check console (F12) for details.`);
