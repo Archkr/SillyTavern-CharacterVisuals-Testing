@@ -2,7 +2,7 @@ import { extension_settings, getContext } from "../../../extensions.js";
 import { saveSettingsDebounced, event_types, eventSource } from "../../../../script.js";
 import { executeSlashCommandsOnChatInput, registerSlashCommand } from "../../../slash-commands.js";
 
-const extensionName = "SillyTavern-CostumeSwitch-Testing";
+const extensionName = "SillyTavern-CostumeSwitch";
 const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
 const logPrefix = "[CostumeSwitch]";
 
@@ -234,19 +234,10 @@ function findAllMatches(combined) {
     return allMatches;
 }
 
-function findBestMatch(combined, bufKey) {
+function findBestMatch(combined) {
     const profile = getActiveProfile();
     const allMatches = findAllMatches(combined);
     if (allMatches.length === 0) return null;
-
-    // Update stats with all detections found in this pass
-    if (bufKey && state.messageStats.has(bufKey)) {
-        const stats = state.messageStats.get(bufKey);
-        allMatches.forEach(m => {
-            const name = normalizeCostumeName(m.name);
-            stats.set(name, (stats.get(name) || 0) + 1);
-        });
-    }
 
     if (profile.enableSceneRoster) {
         const msgState = Array.from(state.perMessageStates.values()).pop();
@@ -715,7 +706,27 @@ function logLastMessageStats() {
 
     console.log(logOutput);
     showStatus("Last message stats logged to browser console (F12).", "success");
-    // Future integration: Could send `logOutput` to the Notebook extension here.
+}
+
+function calculateFinalMessageStats(messageId) {
+    const { chat } = getContext();
+    const message = chat.find(m => m.mesId === messageId);
+    if (!message || !message.mes) {
+        debugLog("Could not find message to calculate stats for:", messageId);
+        return;
+    }
+    
+    const fullText = normalizeStreamText(message.mes);
+    const allMatches = findAllMatches(fullText);
+    const stats = new Map();
+    allMatches.forEach(m => {
+        const name = normalizeCostumeName(m.name);
+        stats.set(name, (stats.get(name) || 0) + 1);
+    });
+
+    const bufKey = `m${messageId}`;
+    state.messageStats.set(bufKey, stats);
+    debugLog("Final stats calculated for", bufKey, stats);
 }
 
 
@@ -762,7 +773,6 @@ const handleGenerationStart = (messageId) => {
     const bufKey = messageId != null ? `m${messageId}` : 'live';
     debugLog(`Generation started for ${bufKey}, resetting state.`);
     
-    // Initialize stats for the new message
     state.messageStats.set(bufKey, new Map());
 
     const profile = getActiveProfile();
@@ -820,7 +830,7 @@ const handleStream = (...args) => {
             msgState.vetoed = true; return;
         }
 
-        const bestMatch = findBestMatch(combined, bufKey);
+        const bestMatch = findBestMatch(combined);
 
         if (bestMatch) {
             const { name: matchedName, matchKind } = bestMatch;
@@ -853,8 +863,8 @@ const handleStream = (...args) => {
 
 const cleanupMessageState = (messageId) => { 
     if (messageId != null) { 
-        state.perMessageBuffers.delete(`m${messageId}`); 
-        // Keep stats in state.messageStats until next generation starts
+        state.perMessageBuffers.delete(`m${messageId}`);
+        calculateFinalMessageStats(messageId);
     }
 };
 
