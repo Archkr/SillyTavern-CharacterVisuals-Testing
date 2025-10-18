@@ -2,7 +2,7 @@ import { extension_settings, getContext } from "../../../extensions.js";
 import { saveSettingsDebounced, event_types, eventSource } from "../../../../script.js";
 import { executeSlashCommandsOnChatInput, registerSlashCommand } from "../../../slash-commands.js";
 
-const extensionName = "SillyTavern-CostumeSwitch-Testing";
+const extensionName = "SillyTavern-CostumeSwitch";
 const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
 const logPrefix = "[CostumeSwitch]";
 
@@ -776,8 +776,6 @@ const handleGenerationStart = (messageId) => {
     const bufKey = messageId != null ? `m${messageId}` : 'live';
     debugLog(`Generation started for ${bufKey}, resetting state.`);
     
-    state.messageStats.set(bufKey, new Map());
-
     const profile = getActiveProfile();
     const oldState = state.perMessageStates.size > 0 ? Array.from(state.perMessageStates.values()).pop() : null;
     
@@ -788,7 +786,7 @@ const handleGenerationStart = (messageId) => {
         lastSubject: oldState?.lastSubject || null,
         sceneRoster: new Set(oldState?.sceneRoster || []),
         rosterTTL: profile.sceneRosterTTL,
-        lastThreshold: 0,
+        processedLength: 0,
     };
 
     if (newState.sceneRoster.size > 0) {
@@ -826,38 +824,33 @@ const handleStream = (...args) => {
         const combined = (prev + normalizeStreamText(tokenText)).slice(-profile.maxBufferChars);
         state.perMessageBuffers.set(bufKey, combined);
         
-        if (combined.length < (msgState.nextThreshold || profile.tokenProcessThreshold)) return;
+        if (combined.length < msgState.processedLength + profile.tokenProcessThreshold) {
+            return;
+        }
         
+        msgState.processedLength = combined.length;
         const bestMatch = findBestMatch(combined);
-        debugLog(`Buffer len: ${combined.length}. Match:`, bestMatch ? `${bestMatch.name} (${bestMatch.matchKind})` : 'None');
-        msgState.nextThreshold = combined.length + profile.tokenProcessThreshold;
-
+        debugLog(`[STREAM] Buffer len: ${combined.length}. Match:`, bestMatch ? `${bestMatch.name} (${bestMatch.matchKind})` : 'None');
 
         if (state.compiledRegexes.vetoRegex && state.compiledRegexes.vetoRegex.test(combined)) {
             debugLog("Veto phrase matched. Halting detection for this message.");
             msgState.vetoed = true; return;
         }
 
-
         if (bestMatch) {
             const { name: matchedName, matchKind } = bestMatch;
             const now = Date.now();
             const suppressMs = profile.repeatSuppressMs;
 
-            // Update Scene Roster
             if (profile.enableSceneRoster) {
                 msgState.sceneRoster.add(matchedName.toLowerCase());
-                msgState.rosterTTL = profile.sceneRosterTTL; // Reset TTL on mention
-                debugLog("Updated scene roster:", Array.from(msgState.sceneRoster));
+                msgState.rosterTTL = profile.sceneRosterTTL;
             }
-            // Update Last Subject for pronoun detection
             if (matchKind !== 'pronoun') {
                 msgState.lastSubject = matchedName;
-                debugLog("Last subject set to:", matchedName);
             }
             
             if (msgState.lastAcceptedName?.toLowerCase() === matchedName.toLowerCase() && (now - msgState.lastAcceptedTs < suppressMs)) {
-                debugLog('Suppressing repeat match for same name (flicker guard)', { matchedName }); 
                 return;
             }
             
@@ -868,12 +861,11 @@ const handleStream = (...args) => {
     } catch (err) { console.error(`${logPrefix} stream handler error:`, err); }
 };
 
-const cleanupMessageState = (messageId) => { 
-    if (messageId != null) { 
-        // The buffer is now the single source of truth for the final message content
+const handleMessageRendered = (messageId) => {
+    if (messageId != null) {
+        const bufKey = `m${messageId}`;
+        debugLog(`Message ${messageId} rendered, calculating final stats from buffer.`);
         calculateFinalMessageStats(messageId);
-        // We don't delete the buffer here, so stats can be checked later.
-        // It will be overwritten by the next generation with the same ID, or cleared on chat change.
     }
 };
 
@@ -883,7 +875,7 @@ function load() {
     state.eventHandlers = {
         [event_types.STREAM_TOKEN_RECEIVED]: handleStream,
         [event_types.GENERATION_STARTED]: handleGenerationStart,
-        [event_types.GENERATION_ENDED]: cleanupMessageState,
+        [event_types.CHARACTER_MESSAGE_RENDERED]: handleMessageRendered,
         [event_types.CHAT_CHANGED]: resetGlobalState,
     };
     for (const [event, handler] of Object.entries(state.eventHandlers)) {
@@ -941,7 +933,7 @@ jQuery(async () => {
         load();
         
         window[`__${extensionName}_unload`] = unload;
-        console.log(`${logPrefix} v2.1.1 loaded successfully.`);
+        console.log(`${logPrefix} v2.1.2 loaded successfully.`);
     } catch (error) {
         console.error(`${logPrefix} failed to initialize:`, error);
         alert(`Failed to initialize Costume Switcher. Check console (F12) for details.`);
