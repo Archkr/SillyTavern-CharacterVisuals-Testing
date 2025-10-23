@@ -177,8 +177,11 @@
             <label class="cs-label-with-icon"><i class="fa-solid fa-vial"></i><b>Live Pattern Tester</b></label>
             <small>Paste text to see detections based on your current unsaved settings.</small>
             <textarea id="cs-regex-test-input" class="text_pole" rows="4" placeholder="Paste a message here..." style="margin-top: 10px;"></textarea>
-            <button id="cs-regex-test-button" class="menu_button interactable">Test Pattern</button>
-            
+            <div class="cs-flex-container cs-tester-actions">
+                <button id="cs-regex-test-button" class="menu_button interactable">Test Pattern</button>
+                <button id="cs-regex-test-copy" class="menu_button interactable" disabled title="Copy the latest live tester report to your clipboard.">Copy Report</button>
+            </div>
+
             <div class="cs-flex-container">
                 <b>Veto Status:</b> <span id="cs-test-veto-result" class="cs-tester-list-placeholder">N/A</span>
             </div>
