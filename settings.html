@@ -191,9 +191,9 @@
                 </ul>
               </div>
               <div class="cs-tester-col">
-                <div class="cs-tester-title">Winning Detection:</div>
+                <div class="cs-tester-title">Live Switch Decisions:</div>
                 <ul id="cs-test-winner-list" class="cs-tester-list">
-                  <li class="cs-tester-list-placeholder">N/A</li>
+                  <li class="cs-tester-list-placeholder">Stream results will appear here.</li>
                 </ul>
               </div>
             </div>
@@ -212,8 +212,14 @@
         <button id="cs-reset" class="menu_button interactable" title="Switch back to your default costume, or the main avatar if none is set.">Manual Reset</button>
       </div>
 
-      <div id="cs-status" class="cs-status-message">Ready</div>
-      <div id="cs-error" class="cs-error-message"></div>
+      <div id="cs-status" class="cs-status-message" aria-live="polite">
+        <i class="fa-solid fa-circle-info"></i>
+        <span class="cs-status-text">Ready</span>
+      </div>
+      <div id="cs-error" class="cs-error-message" role="alert" aria-live="assertive" hidden>
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <span class="cs-status-text"></span>
+      </div>
     </div>
   </div>
 </div>
