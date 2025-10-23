@@ -20,12 +20,19 @@
   font-family: "Inter", "Roboto", sans-serif;
 }
 
+/* Make the <details> tag fill the container */
+#costume-switcher-settings.cs-theme > details {
+  width: 100%;
+}
+
 .cs-shell {
   display: flex;
   flex-direction: column;
   gap: 22px;
   max-width: 1080px;
   margin: 0 auto;
+  /* Add padding-top to separate content from the new sticky header */
+  padding-top: 22px;
 }
 
 .cs-card {
@@ -95,16 +102,9 @@
   padding: 16px 22px;
 }
 
+/* This class is no longer used, as the header is removed */
 .cs-header-card {
-  flex-direction: row;
-  align-items: center;
-  gap: 28px;
-  background: linear-gradient(135deg, rgba(108, 92, 231, 0.26), rgba(46, 213, 115, 0.18));
-  color: #fff;
-}
-
-.cs-header-card::before {
-  border-color: rgba(255, 255, 255, 0.18);
+ display: none;
 }
 
 .cs-header-intro {
@@ -551,4 +551,76 @@
   cursor: not-allowed;
   box-shadow: none;
   transform: none;
+}
+
+
+/* --- NEW STYLES FOR COLLAPSIBLE HEADER --- */
+
+/* Style the <summary> tag to be our new header */
+.cs-summary-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 22px;
+  border-radius: var(--card-radius);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: linear-gradient(135deg, rgba(108, 92, 231, 0.26), rgba(46, 213, 115, 0.18));
+  cursor: pointer;
+  transition: border-radius 0.2s ease-in-out;
+}
+
+/* Hide the default dropdown triangle */
+.cs-summary-header::-webkit-details-marker,
+.cs-summary-header::marker {
+  display: none;
+}
+
+/* When the <details> is open, square off the bottom corners of the header */
+details[open] > .cs-summary-header {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Style the title and subtitle in the new header */
+.cs-summary-header .cs-summary-title {
+  flex: 1;
+}
+.cs-summary-header .cs-title {
+  font-size: 1.5rem;
+  color: #fff;
+}
+.cs-summary-header .cs-subtitle {
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* Tweak the master toggle to fit nicely in the new header */
+.cs-summary-header .cs-master-toggle {
+  padding: 12px 16px;
+  /* Make the copy smaller */
+  grid-template-columns: auto auto;
+  gap: 12px;
+}
+
+.cs-summary-header .cs-master-toggle .cs-switch-copy strong {
+  font-size: 0.95rem;
+  margin-bottom: 0;
+}
+
+.cs-summary-header .cs-master-toggle .cs-switch-copy small {
+  display: none; /* Hide the sub-text */
+}
+
+/* When screen is small, make toggle simpler */
+@media (max-width: 768px) {
+  .cs-summary-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .cs-summary-header .cs-master-toggle {
+    width: 100%;
+  }
 }
