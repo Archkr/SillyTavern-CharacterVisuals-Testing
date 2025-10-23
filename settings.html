@@ -46,37 +46,64 @@
         <div class="cs-layout">
           <div class="cs-column">
             <section class="cs-card">
-          <header class="cs-card-header">
-            <div class="cs-card-title">
-              <i class="fa-solid fa-users"></i>
-              <div>
-                <h3>Profiles</h3>
-                <p>Organize different configurations for varied chats or characters.</p>
+              <header class="cs-card-header">
+                <div class="cs-card-title">
+                  <i class="fa-solid fa-users"></i>
+                  <div>
+                    <h3>Profiles</h3>
+                    <p>Organize different configurations for varied chats or characters.</p>
+                  </div>
+                </div>
+              </header>
+              <div class="cs-card-body">
+                <div class="cs-toolbar">
+                  <select id="cs-profile-select" class="text_pole" title="Select a saved profile to load it."></select>
+                  <button id="cs-profile-save" class="menu_button interactable cs-button-primary" title="Save changes to the active profile.">Save</button>
+                </div>
+                <div class="cs-toolbar">
+                  <input id="cs-profile-name" class="text_pole" type="text" placeholder="Enter a name…" title="Enter a name to rename the active profile or create a new one." />
+                  <button id="cs-profile-saveas" class="menu_button interactable" title="Save the active profile's settings under a new name.">Save As</button>
+                  <button id="cs-profile-rename" class="menu_button interactable" title="Rename the active profile to the entered name.">Rename</button>
+                </div>
+                <p class="cs-helper-text">Use the name field above to create or rename profiles. Leave it blank when simply saving edits to the current profile.</p>
+                <div class="cs-toolbar cs-toolbar--wrap">
+                  <button id="cs-profile-new" class="menu_button interactable" title="Create a fresh profile using default settings.">New (Defaults)</button>
+                  <button id="cs-profile-duplicate" class="menu_button interactable" title="Duplicate the active profile to a new name.">Duplicate Current</button>
+                  <button id="cs-profile-delete" class="menu_button interactable cs-button-danger" title="Delete the active profile.">Delete</button>
+                </div>
+                <div class="cs-toolbar cs-toolbar--wrap">
+                  <button id="cs-profile-import" class="menu_button interactable" title="Import a profile from a .json file.">Import Profile</button>
+                  <button id="cs-profile-export" class="menu_button interactable" title="Export the current profile to a .json file.">Export Profile</button>
+                  <input type="file" id="cs-profile-file-input" accept=".json" hidden />
+                </div>
               </div>
-            </div>
-          </header>
-          <div class="cs-card-body">
-            <div class="cs-toolbar">
-              <select id="cs-profile-select" class="text_pole" title="Select a saved profile to load it."></select>
-              <button id="cs-profile-save" class="menu_button interactable cs-button-primary" title="Save changes to the active profile.">Save</button>
-            </div>
-            <div class="cs-toolbar">
-              <input id="cs-profile-name" class="text_pole" type="text" placeholder="Enter a name…" title="Enter a name to rename the active profile or create a new one." />
-              <button id="cs-profile-saveas" class="menu_button interactable" title="Save the active profile's settings under a new name.">Save As</button>
-              <button id="cs-profile-rename" class="menu_button interactable" title="Rename the active profile to the entered name.">Rename</button>
-            </div>
-            <p class="cs-helper-text">Use the name field above to create or rename profiles. Leave it blank when simply saving edits to the current profile.</p>
-            <div class="cs-toolbar cs-toolbar--wrap">
-              <button id="cs-profile-new" class="menu_button interactable" title="Create a fresh profile using default settings.">New (Defaults)</button>
-              <button id="cs-profile-duplicate" class="menu_button interactable" title="Duplicate the active profile to a new name.">Duplicate Current</button>
-              <button id="cs-profile-delete" class="menu_button interactable cs-button-danger" title="Delete the active profile.">Delete</button>
-            </div>
-            <div class="cs-toolbar cs-toolbar--wrap">
-              <button id="cs-profile-import" class="menu_button interactable" title="Import a profile from a .json file.">Import Profile</button>
-              <button id="cs-profile-export" class="menu_button interactable" title="Export the current profile to a .json file.">Export Profile</button>
-              <input type="file" id="cs-profile-file-input" accept=".json" hidden />
-            </div>
-          </div>
+            </section>
+            <section class="cs-card">
+              <header class="cs-card-header">
+                <div class="cs-card-title">
+                  <i class="fa-solid fa-lock"></i>
+                  <div>
+                    <h3>Manual Overrides</h3>
+                    <p>Lock to a character or pick a fallback costume.</p>
+                  </div>
+                </div>
+              </header>
+              <div class="cs-card-body cs-card-body--stacked">
+                <div class="cs-field">
+                  <label for="cs-focus-lock-select">Focus Lock</label>
+                  <small>Force the switcher to stay on a specific character until you unlock it.</small>
+                  <div class="cs-toolbar">
+                    <select id="cs-focus-lock-select" class="text_pole" style="flex: 1 1 auto;" title="Select a character from your patterns to lock onto."></select>
+                    <button id="cs-focus-lock-toggle" class="menu_button interactable" title="Lock or unlock the focus on the selected character.">Lock</button>
+                  </div>
+                </div>
+                <div class="cs-field">
+                  <label for="cs-default">Default Costume</label>
+                  <input id="cs-default" class="text_pole" type="text" placeholder="e.g., neutral" title="The costume folder to use when no character is detected. Leave blank for the main avatar." />
+                  <small>The costume used when no character is detected. Leave blank to fall back to the main avatar.</small>
+                </div>
+              </div>
+            </section>
           </div>
           <div class="cs-column">
             <section class="cs-card">

@@ -830,26 +830,41 @@ function saveCurrentProfileData() {
     const profileData = {};
     for (const key in uiMapping) {
         const { selector, type } = uiMapping[key];
+        const field = $(selector);
+        if (!field.length) {
+            const fallback = PROFILE_DEFAULTS[key];
+            if (type === 'textarea' || type === 'csvTextarea') {
+                profileData[key] = Array.isArray(fallback) ? [...fallback] : [];
+            } else if (type === 'checkbox') {
+                profileData[key] = Boolean(fallback);
+            } else if (type === 'number' || type === 'range') {
+                profileData[key] = Number.isFinite(fallback) ? fallback : 0;
+            } else {
+                profileData[key] = typeof fallback === 'string' ? fallback : '';
+            }
+            continue;
+        }
+
         let value;
         switch (type) {
             case 'checkbox':
-                value = $(selector).prop('checked');
+                value = field.prop('checked');
                 break;
             case 'textarea':
-                value = $(selector).val().split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+                value = field.val().split(/\r?\n/).map(s => s.trim()).filter(Boolean);
                 break;
             case 'csvTextarea':
-                value = $(selector).val().split(',').map(s => s.trim()).filter(Boolean);
+                value = field.val().split(',').map(s => s.trim()).filter(Boolean);
                 break;
             case 'number':
             case 'range': {
-                const parsed = parseInt($(selector).val(), 10);
+                const parsed = parseInt(field.val(), 10);
                 const fallback = PROFILE_DEFAULTS[key] ?? 0;
                 value = Number.isFinite(parsed) ? parsed : fallback;
                 break;
             }
             default:
-                value = $(selector).val().trim();
+                value = String(field.val() ?? '').trim();
                 break;
         }
         profileData[key] = value;
