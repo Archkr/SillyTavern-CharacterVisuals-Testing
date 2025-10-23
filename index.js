@@ -653,6 +653,93 @@ function copyTextToClipboard(text) {
     }
 }
 
+function summarizeDetectionsForReport(matches = []) {
+    const summaries = new Map();
+    matches.forEach(match => {
+        const key = String(match.name || '').toLowerCase();
+        if (!key) return;
+        if (!summaries.has(key)) {
+            summaries.set(key, {
+                name: match.name || key,
+                total: 0,
+                highestPriority: -Infinity,
+                earliest: Infinity,
+                latest: -Infinity,
+                kinds: {},
+            });
+        }
+        const summary = summaries.get(key);
+        summary.total += 1;
+        const kind = match.matchKind || 'unknown';
+        summary.kinds[kind] = (summary.kinds[kind] || 0) + 1;
+        if (Number.isFinite(match.priority)) {
+            summary.highestPriority = Math.max(summary.highestPriority, match.priority);
+        }
+        if (Number.isFinite(match.matchIndex)) {
+            summary.earliest = Math.min(summary.earliest, match.matchIndex);
+            summary.latest = Math.max(summary.latest, match.matchIndex);
+        }
+    });
+
+    return Array.from(summaries.values()).map(summary => ({
+        ...summary,
+        highestPriority: summary.highestPriority === -Infinity ? null : summary.highestPriority,
+        earliest: summary.earliest === Infinity ? null : summary.earliest + 1,
+        latest: summary.latest === -Infinity ? null : summary.latest + 1,
+    })).sort((a, b) => {
+        if (b.total !== a.total) return b.total - a.total;
+        const bPriority = b.highestPriority ?? -Infinity;
+        const aPriority = a.highestPriority ?? -Infinity;
+        if (bPriority !== aPriority) return bPriority - aPriority;
+        const aEarliest = a.earliest ?? Infinity;
+        const bEarliest = b.earliest ?? Infinity;
+        if (aEarliest !== bEarliest) return aEarliest - bEarliest;
+        return a.name.localeCompare(b.name);
+    });
+}
+
+function summarizeSkipReasonsForReport(events = []) {
+    const counts = new Map();
+    events.forEach(event => {
+        if (event?.type === 'skipped') {
+            const key = event.reason || 'unknown';
+            counts.set(key, (counts.get(key) || 0) + 1);
+        }
+    });
+    return Array.from(counts.entries()).map(([code, count]) => ({ code, count })).sort((a, b) => {
+        if (b.count !== a.count) return b.count - a.count;
+        return a.code.localeCompare(b.code);
+    });
+}
+
+function summarizeSwitchesForReport(events = []) {
+    const switches = events.filter(event => event?.type === 'switch');
+    const uniqueFolders = [];
+    const seen = new Set();
+    switches.forEach(sw => {
+        const raw = sw.folder || sw.name || '';
+        const key = raw.toLowerCase();
+        if (!seen.has(key)) {
+            seen.add(key);
+            uniqueFolders.push(raw || '(unknown)');
+        }
+    });
+
+    const scored = switches.filter(sw => Number.isFinite(sw.score));
+    const topScores = scored
+        .slice()
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5);
+
+    return {
+        total: switches.length,
+        uniqueCount: uniqueFolders.length,
+        uniqueFolders,
+        lastSwitch: switches.length ? switches[switches.length - 1] : null,
+        topScores,
+    };
+}
+
 function formatTesterReport(report) {
     const lines = [];
     const created = new Date(report.generatedAt || Date.now());
@@ -699,6 +786,88 @@ function formatTesterReport(report) {
         });
     } else {
         lines.push('  (none)');
+    }
+
+    const detectionSummary = summarizeDetectionsForReport(report.matches);
+    lines.push('');
+    lines.push('Detection Summary:');
+    if (detectionSummary.length) {
+        detectionSummary.forEach(item => {
+            const kindBreakdown = Object.entries(item.kinds)
+                .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+                .map(([kind, count]) => `${kind}:${count}`)
+                .join(', ');
+            const priorityInfo = item.highestPriority != null ? `, highest priority ${item.highestPriority}` : '';
+            const rangeInfo = item.earliest != null
+                ? item.latest != null && item.latest !== item.earliest
+                    ? `, chars ${item.earliest}-${item.latest}`
+                    : `, char ${item.earliest}`
+                : '';
+            const breakdownText = kindBreakdown || 'none';
+            lines.push(`  - ${item.name}: ${item.total} detections (${breakdownText}${priorityInfo}${rangeInfo})`);
+        });
+    } else {
+        lines.push('  (none)');
+    }
+
+    const switchSummary = summarizeSwitchesForReport(report.events || []);
+    lines.push('');
+    lines.push('Switch Summary:');
+    lines.push(`  Total switches: ${switchSummary.total}`);
+    if (switchSummary.uniqueCount > 0) {
+        lines.push(`  Unique costumes: ${switchSummary.uniqueCount} (${switchSummary.uniqueFolders.join(', ')})`);
+    } else {
+        lines.push('  Unique costumes: 0');
+    }
+    if (switchSummary.lastSwitch) {
+        const last = switchSummary.lastSwitch;
+        const charPos = Number.isFinite(last.charIndex) ? last.charIndex + 1 : '?';
+        const detail = last.matchKind ? ` via ${last.matchKind}` : '';
+        const score = Number.isFinite(last.score) ? `, score ${last.score}` : '';
+        const folderName = last.folder || last.name || '(unknown)';
+        lines.push(`  Last switch: ${folderName} (trigger: ${last.name}${detail}, char ${charPos}${score})`);
+    } else {
+        lines.push('  Last switch: (none)');
+    }
+    if (switchSummary.topScores.length) {
+        lines.push('  Top switch scores:');
+        switchSummary.topScores.forEach((event, idx) => {
+            const charPos = Number.isFinite(event.charIndex) ? event.charIndex + 1 : '?';
+            const detail = event.matchKind ? ` via ${event.matchKind}` : '';
+            const folderName = event.folder || event.name || '(unknown)';
+            lines.push(`    ${idx + 1}. ${folderName} – ${event.score} (trigger: ${event.name}${detail}, char ${charPos})`);
+        });
+    }
+
+    const skipSummary = summarizeSkipReasonsForReport(report.events || []);
+    lines.push('');
+    lines.push('Skip Reasons:');
+    if (skipSummary.length) {
+        skipSummary.forEach(item => {
+            lines.push(`  - ${describeSkipReason(item.code)} (${item.code}): ${item.count}`);
+        });
+    } else {
+        lines.push('  (none)');
+    }
+
+    if (report.finalState) {
+        const rosterNames = Array.isArray(report.finalState.sceneRoster)
+            ? report.finalState.sceneRoster.map(name => {
+                const original = report.matches?.find(m => m.name?.toLowerCase() === name)?.name;
+                return original || name;
+            })
+            : [];
+        lines.push('');
+        lines.push('Final Stream State:');
+        lines.push(`  Scene roster (${rosterNames.length}): ${rosterNames.length ? rosterNames.join(', ') : '(empty)'}`);
+        lines.push(`  Last accepted name: ${report.finalState.lastAcceptedName || '(none)'}`);
+        lines.push(`  Last subject: ${report.finalState.lastSubject || '(none)'}`);
+        if (Number.isFinite(report.finalState.processedLength)) {
+            lines.push(`  Processed characters: ${report.finalState.processedLength}`);
+        }
+        if (Number.isFinite(report.finalState.virtualDurationMs)) {
+            lines.push(`  Simulated duration: ${report.finalState.virtualDurationMs} ms`);
+        }
     }
 
     if (report.profileSnapshot) {
@@ -751,7 +920,9 @@ function createTesterMessageState(profile) {
 function simulateTesterStream(combined, profile, bufKey) {
     const events = [];
     const msgState = state.perMessageStates.get(bufKey);
-    if (!msgState) return events;
+    if (!msgState) {
+        return { events, finalState: null };
+    }
 
     const simulationState = {
         lastIssuedCostume: null,
@@ -829,7 +1000,18 @@ function simulateTesterStream(combined, profile, bufKey) {
         }
     }
 
-    return events;
+    const finalState = {
+        lastAcceptedName: msgState.lastAcceptedName,
+        lastAcceptedTimestamp: msgState.lastAcceptedTs,
+        lastSubject: msgState.lastSubject,
+        processedLength: msgState.processedLength,
+        sceneRoster: Array.from(msgState.sceneRoster || []),
+        rosterTTL: msgState.rosterTTL,
+        vetoed: Boolean(msgState.vetoed),
+        virtualDurationMs: combined.length > 0 ? Math.max(0, (combined.length - 1) * 50) : 0,
+    };
+
+    return { events, finalState };
 }
 
 function renderTesterStream(eventList, events) {
@@ -931,7 +1113,8 @@ function testRegexPattern() {
         }
 
         resetTesterMessageState();
-        const events = simulateTesterStream(combined, tempProfile, bufKey);
+        const simulationResult = simulateTesterStream(combined, tempProfile, bufKey);
+        const events = Array.isArray(simulationResult?.events) ? simulationResult.events : [];
         renderTesterStream(streamList, events);
         state.lastTesterReport = {
             ...reportBase,
@@ -939,6 +1122,14 @@ function testRegexPattern() {
             vetoMatch: null,
             matches: allMatches.map(m => ({ ...m })),
             events: events.map(e => ({ ...e })),
+            finalState: simulationResult?.finalState
+                ? {
+                    ...simulationResult.finalState,
+                    sceneRoster: Array.isArray(simulationResult.finalState.sceneRoster)
+                        ? [...simulationResult.finalState.sceneRoster]
+                        : [],
+                }
+                : null,
         };
         updateTesterCopyButton();
     }
