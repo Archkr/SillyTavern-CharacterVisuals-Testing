@@ -109,6 +109,7 @@ const state = {
     statusTimer: null,
     testerTimers: [],
     lastTesterReport: null,
+    buildMeta: null,
 };
 
 // ======================================================================
@@ -614,6 +615,69 @@ function renderMappings(profile) {
             .append($("<td>").append($("<button>").addClass("map-remove menu_button interactable").html('<i class="fa-solid fa-trash-can"></i>')))
         );
     });
+}
+
+async function fetchBuildMetadata() {
+    const meta = {
+        version: null,
+        label: 'Dev build',
+        updatedLabel: `Loaded ${new Date().toLocaleString()}`,
+    };
+
+    try {
+        const manifestRequest = $.ajax({
+            url: `${extensionFolderPath}/manifest.json`,
+            dataType: 'json',
+            cache: false,
+        });
+        const manifest = await manifestRequest;
+        if (manifest?.version) {
+            meta.version = manifest.version;
+            meta.label = `v${manifest.version}`;
+        } else {
+            meta.label = 'Local build';
+        }
+
+        const lastModifiedHeader = manifestRequest.getResponseHeader('Last-Modified');
+        if (lastModifiedHeader) {
+            const parsed = new Date(lastModifiedHeader);
+            if (!Number.isNaN(parsed.valueOf())) {
+                meta.updatedLabel = `Updated ${parsed.toLocaleString()}`;
+            }
+        }
+    } catch (err) {
+        console.warn(`${logPrefix} Unable to read manifest for build metadata.`, err);
+        meta.label = 'Dev build';
+        meta.updatedLabel = 'Manifest unavailable';
+    }
+
+    return meta;
+}
+
+function renderBuildMetadata(meta) {
+    state.buildMeta = meta;
+    const versionEl = document.getElementById('cs-build-version');
+    const updatedEl = document.getElementById('cs-build-updated');
+
+    if (versionEl) {
+        versionEl.textContent = meta?.label || 'Dev build';
+        if (meta?.version) {
+            versionEl.dataset.version = meta.version;
+            versionEl.setAttribute('title', `Extension version ${meta.version}`);
+        } else {
+            delete versionEl.dataset.version;
+            versionEl.removeAttribute('title');
+        }
+    }
+
+    if (updatedEl) {
+        updatedEl.textContent = meta?.updatedLabel || '';
+        if (meta?.updatedLabel) {
+            updatedEl.setAttribute('title', meta.updatedLabel);
+        } else {
+            updatedEl.removeAttribute('title');
+        }
+    }
 }
 
 function persistSettings(message, type = 'success') {
@@ -1604,9 +1668,12 @@ jQuery(async () => {
     try {
         const { store } = getSettingsObj();
         extension_settings[extensionName] = store[extensionName];
-        
+
         const settingsHtml = await $.get(`${extensionFolderPath}/settings.html`);
         $("#extensions_settings").append(settingsHtml);
+
+        const buildMeta = await fetchBuildMetadata();
+        renderBuildMetadata(buildMeta);
 
         populateProfileDropdown();
         populatePresetDropdown();
@@ -1614,9 +1681,9 @@ jQuery(async () => {
         wireUI();
         registerCommands();
         load();
-        
+
         window[`__${extensionName}_unload`] = unload;
-        console.log(`${logPrefix} v2.1.2 loaded successfully.`);
+        console.log(`${logPrefix} ${buildMeta?.label || 'dev build'} loaded successfully.`);
     } catch (error) {
         console.error(`${logPrefix} failed to initialize:`, error);
         alert(`Failed to initialize Costume Switcher. Check console (F12) for details.`);
