@@ -256,6 +256,9 @@ function findBestMatch(combined) {
 function getWinner(matches, bias = 0, textLength = 0, options = {}) {
     const rosterSet = options?.rosterSet instanceof Set ? options.rosterSet : null;
     const rosterBonus = Number.isFinite(options?.rosterBonus) ? options.rosterBonus : 150;
+    const rosterPriorityDropoff = Number.isFinite(options?.rosterPriorityDropoff)
+        ? options.rosterPriorityDropoff
+        : 0.5;
     const scoredMatches = matches.map(match => {
         const isActive = match.priority >= 3; // speaker, attribution, action
         const distanceFromEnd = Number.isFinite(textLength)
@@ -266,7 +269,12 @@ function getWinner(matches, bias = 0, textLength = 0, options = {}) {
         if (rosterSet) {
             const normalized = String(match.name || '').toLowerCase();
             if (normalized && rosterSet.has(normalized)) {
-                score += rosterBonus;
+                let bonus = rosterBonus;
+                if (match.priority >= 3 && rosterPriorityDropoff > 0) {
+                    const dropoffMultiplier = 1 - rosterPriorityDropoff * (match.priority - 2);
+                    bonus *= Math.max(0, dropoffMultiplier);
+                }
+                score += bonus;
             }
         }
         return { ...match, score };
