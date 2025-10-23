@@ -233,8 +233,14 @@ input[type="range"].cs-slider:focus::-moz-range-thumb { box-shadow: 0 0 0 2px va
 
 /* --- Live Tester --- */
 .cs-tester-output-container {
-    display: flex; gap: 10px; padding: 10px; min-height: 100px; 
+    display: flex; gap: 10px; padding: 10px; min-height: 100px;
     margin-top: 10px; background-color: var(--bg0);
+}
+.cs-tester-actions {
+    justify-content: flex-start;
+}
+.cs-tester-actions > .menu_button {
+    min-width: 140px;
 }
 .cs-tester-col { flex: 1; font-size: 0.9em; }
 .cs-tester-col--divider { border-right: 1px solid var(--border); padding-right: 10px; }
@@ -248,3 +254,7 @@ input[type="range"].cs-slider:focus::-moz-range-thumb { box-shadow: 0 0 0 2px va
 .cs-tester-log-skip small { margin-left: 6px; }
 .cs-tester-log-veto { color: var(--red); font-weight: 600; }
 .cs-tester-log-veto small { color: var(--text-color); margin-left: 6px; font-weight: normal; }
+#cs-regex-test-copy[disabled] {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
