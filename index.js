@@ -328,11 +328,12 @@ function recompileRegexes() {
         const actionVerbsPattern = escapeVerbList(profile.actionVerbs);
 
         const speakerTemplate = '(?:^|[\r\n]+|[>\]]\s*)({{PATTERNS}})\s*:';
+        const boundaryLookbehind = "(?<![A-Za-z0-9_'’])";
         const attributionTemplate = attributionVerbsPattern
-            ? `(?:,\s*|["”]\s*|(?:^|[.?!]\s+|[\r\n]+))({{PATTERNS}})\s+(?:${attributionVerbsPattern})`
+            ? `${boundaryLookbehind}({{PATTERNS}})\\s+(?:${attributionVerbsPattern})`
             : null;
         const actionTemplate = actionVerbsPattern
-            ? `(?:^|[\r\n]+)\s*({{PATTERNS}})(?:['’]s)?\s+(?:\\w+\\s+){0,3}?(?:${actionVerbsPattern})`
+            ? `${boundaryLookbehind}({{PATTERNS}})(?:['’]s)?\\s+(?:\\w+\\s+){0,3}?(?:${actionVerbsPattern})`
             : null;
 
         state.compiledRegexes = {
