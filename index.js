@@ -528,10 +528,30 @@ function clearSessionTopCharacters() {
     };
 }
 
+function clampTopCount(count = 4) {
+    return Math.min(Math.max(Number(count) || 4, 1), 4);
+}
+
+function getLastStatsMessageKey() {
+    if (!(state.messageStats instanceof Map) || state.messageStats.size === 0) {
+        return null;
+    }
+    const lastKey = Array.from(state.messageStats.keys()).pop();
+    return normalizeMessageKey(lastKey);
+}
+
 function getLastTopCharacters(count = 4) {
-    const limit = Math.min(Math.max(Number(count) || 4, 1), 4);
+    const limit = clampTopCount(count);
     if (Array.isArray(state.latestTopRanking?.ranking) && state.latestTopRanking.ranking.length) {
         return state.latestTopRanking.ranking.slice(0, limit);
+    }
+
+    const lastMessageKey = getLastStatsMessageKey();
+    if (lastMessageKey && state.topSceneRanking instanceof Map) {
+        const rankingForKey = state.topSceneRanking.get(lastMessageKey);
+        if (Array.isArray(rankingForKey) && rankingForKey.length) {
+            return rankingForKey.slice(0, limit);
+        }
     }
 
     if (state.topSceneRanking instanceof Map && state.topSceneRanking.size > 0) {
@@ -1738,7 +1758,7 @@ async function manualReset() {
 }
 
 function logLastMessageStats() {
-    let lastMessageKey = normalizeMessageKey(Array.from(state.messageStats.keys()).pop());
+    let lastMessageKey = getLastStatsMessageKey();
 
     if (!lastMessageKey) {
         const sessionKey = ensureSessionData()?.lastMessageKey;
@@ -2035,10 +2055,16 @@ function registerCommands() {
 
     registerSlashCommand("cs-top", (args) => {
         const desired = Number(args?.[0]);
-        const count = Math.min(Math.max(Number.isFinite(desired) ? desired : 4, 1), 4);
+        const count = clampTopCount(Number.isFinite(desired) ? desired : 4);
         const statsMessage = logLastMessageStats();
         const names = getTopCharacterNamesString(count);
-        return names || statsMessage || emptyTopCharactersMessage;
+        if (names) {
+            return names;
+        }
+        if (typeof statsMessage === 'string' && !statsMessage.includes('Top Ranked Characters:')) {
+            return statsMessage;
+        }
+        return emptyTopCharactersMessage;
     }, ["count?"], "Logs mention stats and returns a comma-separated list of the top detected characters from the last message (1-4).", true);
 
     [1, 2, 3, 4].forEach((num) => {
