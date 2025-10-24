@@ -109,7 +109,102 @@ const state = {
     statusTimer: null,
     testerTimers: [],
     lastTesterReport: null,
+    buildMeta: null,
+    topSceneRanking: new Map(),
+    latestTopRanking: { bufKey: null, ranking: [], fullRanking: [], updatedAt: 0 },
 };
+
+const TAB_STORAGE_KEY = `${extensionName}-active-tab`;
+
+function initTabNavigation() {
+    const container = document.getElementById('costume-switcher-settings');
+    if (!container) return;
+
+    const buttons = Array.from(container.querySelectorAll('.cs-tab-button'));
+    const panels = Array.from(container.querySelectorAll('.cs-tab-panel'));
+    if (!buttons.length || !panels.length) return;
+
+    const buttonByTab = new Map(buttons.map(btn => [btn.dataset.tab, btn]));
+    const panelByTab = new Map(panels.map(panel => [panel.dataset.tab, panel]));
+
+    let storedTab = null;
+    try {
+        storedTab = window.localStorage?.getItem(TAB_STORAGE_KEY) || null;
+    } catch (err) {
+        console.debug(`${logPrefix} Unable to read stored tab preference:`, err);
+    }
+
+    const activateTab = (tabId, { focusButton = false } = {}) => {
+        if (!buttonByTab.has(tabId) || !panelByTab.has(tabId)) return;
+
+        for (const [id, btn] of buttonByTab.entries()) {
+            const isActive = id === tabId;
+            btn.classList.toggle('is-active', isActive);
+            btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            btn.setAttribute('tabindex', isActive ? '0' : '-1');
+            if (isActive && focusButton) {
+                btn.focus();
+            }
+        }
+
+        for (const [id, panel] of panelByTab.entries()) {
+            const isActive = id === tabId;
+            panel.classList.toggle('is-active', isActive);
+            panel.toggleAttribute('hidden', !isActive);
+        }
+
+        try {
+            window.localStorage?.setItem(TAB_STORAGE_KEY, tabId);
+        } catch (err) {
+            console.debug(`${logPrefix} Unable to persist tab preference:`, err);
+        }
+    };
+
+    const defaultTab = buttonByTab.has(storedTab) ? storedTab : buttons[0].dataset.tab;
+    activateTab(defaultTab);
+
+    container.addEventListener('click', (event) => {
+        const target = event.target.closest('.cs-tab-button');
+        if (!target || !container.contains(target)) return;
+        const tabId = target.dataset.tab;
+        if (tabId) {
+            activateTab(tabId);
+        }
+    });
+
+    container.addEventListener('keydown', (event) => {
+        if (!event.target.classList.contains('cs-tab-button')) return;
+
+        const currentIndex = buttons.indexOf(event.target);
+        if (currentIndex === -1) return;
+
+        let nextIndex = null;
+        switch (event.key) {
+            case 'ArrowRight':
+            case 'ArrowDown':
+                nextIndex = (currentIndex + 1) % buttons.length;
+                break;
+            case 'ArrowLeft':
+            case 'ArrowUp':
+                nextIndex = (currentIndex - 1 + buttons.length) % buttons.length;
+                break;
+            case 'Home':
+                nextIndex = 0;
+                break;
+            case 'End':
+                nextIndex = buttons.length - 1;
+                break;
+            default:
+                break;
+        }
+
+        if (nextIndex != null) {
+            event.preventDefault();
+            const nextButton = buttons[nextIndex];
+            activateTab(nextButton.dataset.tab, { focusButton: true });
+        }
+    });
+}
 
 // ======================================================================
 // REGEX & DETECTION LOGIC
@@ -242,32 +337,209 @@ function findBestMatch(combined) {
     const allMatches = findAllMatches(combined);
     if (allMatches.length === 0) return null;
 
+    let rosterSet = null;
     if (profile.enableSceneRoster) {
         const msgState = Array.from(state.perMessageStates.values()).pop();
         if (msgState && msgState.sceneRoster.size > 0) {
-            const rosterMatches = allMatches.filter(m => msgState.sceneRoster.has(m.name.toLowerCase()));
-            if (rosterMatches.length > 0) {
-                // Roster is active, only consider matches from the roster
-                return getWinner(rosterMatches, profile.detectionBias, combined.length);
-            }
+            rosterSet = msgState.sceneRoster;
         }
     }
 
-    return getWinner(allMatches, profile.detectionBias, combined.length);
+    return getWinner(allMatches, profile.detectionBias, combined.length, { rosterSet });
 }
 
-function getWinner(matches, bias = 0, textLength = 0) {
+function getWinner(matches, bias = 0, textLength = 0, options = {}) {
+    const rosterSet = options?.rosterSet instanceof Set ? options.rosterSet : null;
+    const rosterBonus = Number.isFinite(options?.rosterBonus) ? options.rosterBonus : 150;
+    const rosterPriorityDropoff = Number.isFinite(options?.rosterPriorityDropoff)
+        ? options.rosterPriorityDropoff
+        : 0.5;
     const scoredMatches = matches.map(match => {
         const isActive = match.priority >= 3; // speaker, attribution, action
         const distanceFromEnd = Number.isFinite(textLength)
             ? Math.max(0, textLength - match.matchIndex)
             : 0;
         const baseScore = match.priority * 100 - distanceFromEnd;
-        const score = baseScore + (isActive ? bias : 0);
+        let score = baseScore + (isActive ? bias : 0);
+        if (rosterSet) {
+            const normalized = String(match.name || '').toLowerCase();
+            if (normalized && rosterSet.has(normalized)) {
+                let bonus = rosterBonus;
+                if (match.priority >= 3 && rosterPriorityDropoff > 0) {
+                    const dropoffMultiplier = 1 - rosterPriorityDropoff * (match.priority - 2);
+                    bonus *= Math.max(0, dropoffMultiplier);
+                }
+                score += bonus;
+            }
+        }
         return { ...match, score };
     });
     scoredMatches.sort((a, b) => b.score - a.score);
     return scoredMatches[0];
+}
+
+function buildLowercaseSet(values) {
+    if (!values) return null;
+    const iterable = values instanceof Set ? values : new Set(values);
+    const lower = new Set();
+    for (const value of iterable) {
+        const normalized = String(value ?? '').trim().toLowerCase();
+        if (normalized) {
+            lower.add(normalized);
+        }
+    }
+    return lower.size ? lower : null;
+}
+
+function rankSceneCharacters(matches, options = {}) {
+    if (!Array.isArray(matches) || matches.length === 0) {
+        return [];
+    }
+
+    const rosterSet = buildLowercaseSet(options?.rosterSet);
+    const summary = new Map();
+
+    matches.forEach((match, idx) => {
+        if (!match || !match.name) return;
+        const normalized = normalizeCostumeName(match.name);
+        if (!normalized) return;
+
+        const displayName = String(match.name).trim() || normalized;
+        const key = normalized.toLowerCase();
+        let entry = summary.get(key);
+        if (!entry) {
+            entry = {
+                name: displayName,
+                normalized,
+                count: 0,
+                bestPriority: -Infinity,
+                earliest: Number.POSITIVE_INFINITY,
+                latest: Number.NEGATIVE_INFINITY,
+                inSceneRoster: rosterSet ? rosterSet.has(key) : false,
+            };
+            summary.set(key, entry);
+        }
+
+        entry.count += 1;
+        const priority = Number.isFinite(match.priority) ? match.priority : 0;
+        if (priority > entry.bestPriority) {
+            entry.bestPriority = priority;
+        }
+        const index = Number.isFinite(match.matchIndex) ? match.matchIndex : idx;
+        if (index < entry.earliest) {
+            entry.earliest = index;
+            entry.firstMatchKind = match.matchKind || entry.firstMatchKind || null;
+        }
+        if (index > entry.latest) {
+            entry.latest = index;
+        }
+        if (!entry.inSceneRoster && rosterSet) {
+            entry.inSceneRoster = rosterSet.has(key);
+        }
+    });
+
+    const ranked = Array.from(summary.values()).map((entry) => {
+        const priorityScore = Number.isFinite(entry.bestPriority) ? entry.bestPriority : 0;
+        const earliest = Number.isFinite(entry.earliest) ? entry.earliest : Number.MAX_SAFE_INTEGER;
+        const rosterBonus = entry.inSceneRoster ? 50 : 0;
+        const score = entry.count * 1000 + priorityScore * 100 + rosterBonus - earliest;
+        return {
+            name: entry.name,
+            normalized: entry.normalized,
+            count: entry.count,
+            bestPriority: priorityScore,
+            earliest: Number.isFinite(entry.earliest) ? entry.earliest : null,
+            latest: Number.isFinite(entry.latest) ? entry.latest : null,
+            inSceneRoster: Boolean(entry.inSceneRoster),
+            firstMatchKind: entry.firstMatchKind || null,
+            score,
+        };
+    });
+
+    ranked.sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        if (b.count !== a.count) return b.count - a.count;
+        if (b.bestPriority !== a.bestPriority) return b.bestPriority - a.bestPriority;
+        const aEarliest = Number.isFinite(a.earliest) ? a.earliest : Number.MAX_SAFE_INTEGER;
+        const bEarliest = Number.isFinite(b.earliest) ? b.earliest : Number.MAX_SAFE_INTEGER;
+        if (aEarliest !== bEarliest) return aEarliest - bEarliest;
+        return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    });
+
+    return ranked;
+}
+
+function ensureSessionData() {
+    const settings = getSettings();
+    if (!settings) return null;
+    if (typeof settings.session !== 'object' || settings.session === null) {
+        settings.session = {};
+    }
+    return settings.session;
+}
+
+function updateSessionTopCharacters(bufKey, ranking) {
+    const session = ensureSessionData();
+    if (!session) return;
+
+    const topRanking = Array.isArray(ranking) ? ranking.slice(0, 4) : [];
+    const names = topRanking.map(entry => entry.name);
+    const normalizedNames = topRanking.map(entry => entry.normalized);
+    const details = topRanking.map(entry => ({
+        name: entry.name,
+        normalized: entry.normalized,
+        count: entry.count,
+        bestPriority: entry.bestPriority,
+        inSceneRoster: entry.inSceneRoster,
+        score: Number.isFinite(entry.score) ? Math.round(entry.score) : 0,
+    }));
+
+    session.topCharacters = names;
+    session.topCharactersNormalized = normalizedNames;
+    session.topCharactersString = names.join(', ');
+    session.topCharacterDetails = details;
+    session.lastMessageKey = bufKey || null;
+    session.lastUpdated = Date.now();
+
+    state.latestTopRanking = {
+        bufKey: bufKey || null,
+        ranking: topRanking,
+        fullRanking: Array.isArray(ranking) ? ranking : [],
+        updatedAt: session.lastUpdated,
+    };
+}
+
+function clearSessionTopCharacters() {
+    const session = ensureSessionData();
+    if (!session) return;
+    session.topCharacters = [];
+    session.topCharactersNormalized = [];
+    session.topCharactersString = '';
+    session.topCharacterDetails = [];
+    session.lastMessageKey = null;
+    session.lastUpdated = Date.now();
+
+    state.latestTopRanking = {
+        bufKey: null,
+        ranking: [],
+        fullRanking: [],
+        updatedAt: session.lastUpdated,
+    };
+}
+
+function getLastTopCharacters(count = 4) {
+    const limit = Math.min(Math.max(Number(count) || 4, 1), 4);
+    if (Array.isArray(state.latestTopRanking?.ranking) && state.latestTopRanking.ranking.length) {
+        return state.latestTopRanking.ranking.slice(0, limit);
+    }
+
+    if (state.topSceneRanking instanceof Map && state.topSceneRanking.size > 0) {
+        const lastRanking = Array.from(state.topSceneRanking.values()).pop();
+        if (Array.isArray(lastRanking) && lastRanking.length) {
+            return lastRanking.slice(0, limit);
+        }
+    }
+    return [];
 }
 
 
@@ -447,6 +719,9 @@ const uiMapping = {
     debug: { selector: '#cs-debug', type: 'checkbox' },
     globalCooldownMs: { selector: '#cs-global-cooldown', type: 'number' },
     repeatSuppressMs: { selector: '#cs-repeat-suppress', type: 'number' },
+    perTriggerCooldownMs: { selector: '#cs-per-trigger-cooldown', type: 'number' },
+    failedTriggerCooldownMs: { selector: '#cs-failed-trigger-cooldown', type: 'number' },
+    maxBufferChars: { selector: '#cs-max-buffer-chars', type: 'number' },
     tokenProcessThreshold: { selector: '#cs-token-process-threshold', type: 'number' },
     detectionBias: { selector: '#cs-detection-bias', type: 'range' },
     detectAttribution: { selector: '#cs-detect-attribution', type: 'checkbox' },
@@ -460,6 +735,31 @@ const uiMapping = {
     enableSceneRoster: { selector: '#cs-scene-roster-enable', type: 'checkbox' },
     sceneRosterTTL: { selector: '#cs-scene-roster-ttl', type: 'number' },
 };
+
+function normalizeProfileNameInput(name) {
+    return String(name ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function getUniqueProfileName(baseName = 'Profile') {
+    const settings = getSettings();
+    let attempt = normalizeProfileNameInput(baseName);
+    if (!attempt) attempt = 'Profile';
+    if (!settings?.profiles?.[attempt]) return attempt;
+
+    let counter = 2;
+    while (settings.profiles[`${attempt} (${counter})`]) {
+        counter += 1;
+    }
+    return `${attempt} (${counter})`;
+}
+
+function resolveMaxBufferChars(profile) {
+    const raw = Number(profile?.maxBufferChars);
+    if (Number.isFinite(raw) && raw > 0) {
+        return raw;
+    }
+    return PROFILE_DEFAULTS.maxBufferChars;
+}
 
 function populateProfileDropdown() {
     const select = $("#cs-profile-select");
@@ -508,7 +808,7 @@ function loadProfile(profileName) {
     }
     settings.activeProfile = profileName;
     const profile = getActiveProfile();
-    $("#cs-profile-name").val(profileName);
+    $("#cs-profile-name").val('').attr('placeholder', `Enter a name... (current: ${profileName})`);
     $("#cs-enable").prop('checked', !!settings.enabled);
     for (const key in uiMapping) {
         const { selector, type } = uiMapping[key];
@@ -530,26 +830,41 @@ function saveCurrentProfileData() {
     const profileData = {};
     for (const key in uiMapping) {
         const { selector, type } = uiMapping[key];
+        const field = $(selector);
+        if (!field.length) {
+            const fallback = PROFILE_DEFAULTS[key];
+            if (type === 'textarea' || type === 'csvTextarea') {
+                profileData[key] = Array.isArray(fallback) ? [...fallback] : [];
+            } else if (type === 'checkbox') {
+                profileData[key] = Boolean(fallback);
+            } else if (type === 'number' || type === 'range') {
+                profileData[key] = Number.isFinite(fallback) ? fallback : 0;
+            } else {
+                profileData[key] = typeof fallback === 'string' ? fallback : '';
+            }
+            continue;
+        }
+
         let value;
         switch (type) {
             case 'checkbox':
-                value = $(selector).prop('checked');
+                value = field.prop('checked');
                 break;
             case 'textarea':
-                value = $(selector).val().split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+                value = field.val().split(/\r?\n/).map(s => s.trim()).filter(Boolean);
                 break;
             case 'csvTextarea':
-                value = $(selector).val().split(',').map(s => s.trim()).filter(Boolean);
+                value = field.val().split(',').map(s => s.trim()).filter(Boolean);
                 break;
             case 'number':
             case 'range': {
-                const parsed = parseInt($(selector).val(), 10);
+                const parsed = parseInt(field.val(), 10);
                 const fallback = PROFILE_DEFAULTS[key] ?? 0;
                 value = Number.isFinite(parsed) ? parsed : fallback;
                 break;
             }
             default:
-                value = $(selector).val().trim();
+                value = String(field.val() ?? '').trim();
                 break;
         }
         profileData[key] = value;
@@ -573,6 +888,69 @@ function renderMappings(profile) {
             .append($("<td>").append($("<button>").addClass("map-remove menu_button interactable").html('<i class="fa-solid fa-trash-can"></i>')))
         );
     });
+}
+
+async function fetchBuildMetadata() {
+    const meta = {
+        version: null,
+        label: 'Dev build',
+        updatedLabel: `Loaded ${new Date().toLocaleString()}`,
+    };
+
+    try {
+        const manifestRequest = $.ajax({
+            url: `${extensionFolderPath}/manifest.json`,
+            dataType: 'json',
+            cache: false,
+        });
+        const manifest = await manifestRequest;
+        if (manifest?.version) {
+            meta.version = manifest.version;
+            meta.label = `v${manifest.version}`;
+        } else {
+            meta.label = 'Local build';
+        }
+
+        const lastModifiedHeader = manifestRequest.getResponseHeader('Last-Modified');
+        if (lastModifiedHeader) {
+            const parsed = new Date(lastModifiedHeader);
+            if (!Number.isNaN(parsed.valueOf())) {
+                meta.updatedLabel = `Updated ${parsed.toLocaleString()}`;
+            }
+        }
+    } catch (err) {
+        console.warn(`${logPrefix} Unable to read manifest for build metadata.`, err);
+        meta.label = 'Dev build';
+        meta.updatedLabel = 'Manifest unavailable';
+    }
+
+    return meta;
+}
+
+function renderBuildMetadata(meta) {
+    state.buildMeta = meta;
+    const versionEl = document.getElementById('cs-build-version');
+    const updatedEl = document.getElementById('cs-build-updated');
+
+    if (versionEl) {
+        versionEl.textContent = meta?.label || 'Dev build';
+        if (meta?.version) {
+            versionEl.dataset.version = meta.version;
+            versionEl.setAttribute('title', `Extension version ${meta.version}`);
+        } else {
+            delete versionEl.dataset.version;
+            versionEl.removeAttribute('title');
+        }
+    }
+
+    if (updatedEl) {
+        updatedEl.textContent = meta?.updatedLabel || '';
+        if (meta?.updatedLabel) {
+            updatedEl.setAttribute('title', meta.updatedLabel);
+        } else {
+            updatedEl.removeAttribute('title');
+        }
+    }
 }
 
 function persistSettings(message, type = 'success') {
@@ -608,6 +986,26 @@ function updateTesterCopyButton() {
     button.prop('disabled', !hasReport);
 }
 
+function updateTesterTopCharactersDisplay(entries) {
+    const el = document.getElementById('cs-test-top-characters');
+    if (!el) return;
+
+    if (entries === null) {
+        el.textContent = 'N/A';
+        el.classList.add('cs-tester-list-placeholder');
+        return;
+    }
+
+    if (!Array.isArray(entries) || entries.length === 0) {
+        el.textContent = '(none)';
+        el.classList.add('cs-tester-list-placeholder');
+        return;
+    }
+
+    el.textContent = entries.map(entry => entry.name).join(', ');
+    el.classList.remove('cs-tester-list-placeholder');
+}
+
 function copyTextToClipboard(text) {
     if (typeof navigator !== 'undefined' && navigator?.clipboard?.writeText) {
         return navigator.clipboard.writeText(text).catch(() => fallbackCopy());
@@ -638,6 +1036,93 @@ function copyTextToClipboard(text) {
             }
         });
     }
+}
+
+function summarizeDetectionsForReport(matches = []) {
+    const summaries = new Map();
+    matches.forEach(match => {
+        const key = String(match.name || '').toLowerCase();
+        if (!key) return;
+        if (!summaries.has(key)) {
+            summaries.set(key, {
+                name: match.name || key,
+                total: 0,
+                highestPriority: -Infinity,
+                earliest: Infinity,
+                latest: -Infinity,
+                kinds: {},
+            });
+        }
+        const summary = summaries.get(key);
+        summary.total += 1;
+        const kind = match.matchKind || 'unknown';
+        summary.kinds[kind] = (summary.kinds[kind] || 0) + 1;
+        if (Number.isFinite(match.priority)) {
+            summary.highestPriority = Math.max(summary.highestPriority, match.priority);
+        }
+        if (Number.isFinite(match.matchIndex)) {
+            summary.earliest = Math.min(summary.earliest, match.matchIndex);
+            summary.latest = Math.max(summary.latest, match.matchIndex);
+        }
+    });
+
+    return Array.from(summaries.values()).map(summary => ({
+        ...summary,
+        highestPriority: summary.highestPriority === -Infinity ? null : summary.highestPriority,
+        earliest: summary.earliest === Infinity ? null : summary.earliest + 1,
+        latest: summary.latest === -Infinity ? null : summary.latest + 1,
+    })).sort((a, b) => {
+        if (b.total !== a.total) return b.total - a.total;
+        const bPriority = b.highestPriority ?? -Infinity;
+        const aPriority = a.highestPriority ?? -Infinity;
+        if (bPriority !== aPriority) return bPriority - aPriority;
+        const aEarliest = a.earliest ?? Infinity;
+        const bEarliest = b.earliest ?? Infinity;
+        if (aEarliest !== bEarliest) return aEarliest - bEarliest;
+        return a.name.localeCompare(b.name);
+    });
+}
+
+function summarizeSkipReasonsForReport(events = []) {
+    const counts = new Map();
+    events.forEach(event => {
+        if (event?.type === 'skipped') {
+            const key = event.reason || 'unknown';
+            counts.set(key, (counts.get(key) || 0) + 1);
+        }
+    });
+    return Array.from(counts.entries()).map(([code, count]) => ({ code, count })).sort((a, b) => {
+        if (b.count !== a.count) return b.count - a.count;
+        return a.code.localeCompare(b.code);
+    });
+}
+
+function summarizeSwitchesForReport(events = []) {
+    const switches = events.filter(event => event?.type === 'switch');
+    const uniqueFolders = [];
+    const seen = new Set();
+    switches.forEach(sw => {
+        const raw = sw.folder || sw.name || '';
+        const key = raw.toLowerCase();
+        if (!seen.has(key)) {
+            seen.add(key);
+            uniqueFolders.push(raw || '(unknown)');
+        }
+    });
+
+    const scored = switches.filter(sw => Number.isFinite(sw.score));
+    const topScores = scored
+        .slice()
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5);
+
+    return {
+        total: switches.length,
+        uniqueCount: uniqueFolders.length,
+        uniqueFolders,
+        lastSwitch: switches.length ? switches[switches.length - 1] : null,
+        topScores,
+    };
 }
 
 function formatTesterReport(report) {
@@ -686,6 +1171,102 @@ function formatTesterReport(report) {
         });
     } else {
         lines.push('  (none)');
+    }
+
+    const detectionSummary = summarizeDetectionsForReport(report.matches);
+    lines.push('');
+    lines.push('Detection Summary:');
+    if (detectionSummary.length) {
+        detectionSummary.forEach(item => {
+            const kindBreakdown = Object.entries(item.kinds)
+                .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+                .map(([kind, count]) => `${kind}:${count}`)
+                .join(', ');
+            const priorityInfo = item.highestPriority != null ? `, highest priority ${item.highestPriority}` : '';
+            const rangeInfo = item.earliest != null
+                ? item.latest != null && item.latest !== item.earliest
+                    ? `, chars ${item.earliest}-${item.latest}`
+                    : `, char ${item.earliest}`
+                : '';
+            const breakdownText = kindBreakdown || 'none';
+            lines.push(`  - ${item.name}: ${item.total} detections (${breakdownText}${priorityInfo}${rangeInfo})`);
+        });
+    } else {
+        lines.push('  (none)');
+    }
+
+    const switchSummary = summarizeSwitchesForReport(report.events || []);
+    lines.push('');
+    lines.push('Switch Summary:');
+    lines.push(`  Total switches: ${switchSummary.total}`);
+    if (switchSummary.uniqueCount > 0) {
+        lines.push(`  Unique costumes: ${switchSummary.uniqueCount} (${switchSummary.uniqueFolders.join(', ')})`);
+    } else {
+        lines.push('  Unique costumes: 0');
+    }
+    if (switchSummary.lastSwitch) {
+        const last = switchSummary.lastSwitch;
+        const charPos = Number.isFinite(last.charIndex) ? last.charIndex + 1 : '?';
+        const detail = last.matchKind ? ` via ${last.matchKind}` : '';
+        const score = Number.isFinite(last.score) ? `, score ${last.score}` : '';
+        const folderName = last.folder || last.name || '(unknown)';
+        lines.push(`  Last switch: ${folderName} (trigger: ${last.name}${detail}, char ${charPos}${score})`);
+    } else {
+        lines.push('  Last switch: (none)');
+    }
+    if (switchSummary.topScores.length) {
+        lines.push('  Top switch scores:');
+        switchSummary.topScores.forEach((event, idx) => {
+            const charPos = Number.isFinite(event.charIndex) ? event.charIndex + 1 : '?';
+            const detail = event.matchKind ? ` via ${event.matchKind}` : '';
+            const folderName = event.folder || event.name || '(unknown)';
+            lines.push(`    ${idx + 1}. ${folderName} – ${event.score} (trigger: ${event.name}${detail}, char ${charPos})`);
+        });
+    }
+
+    const skipSummary = summarizeSkipReasonsForReport(report.events || []);
+    lines.push('');
+    lines.push('Skip Reasons:');
+    if (skipSummary.length) {
+        skipSummary.forEach(item => {
+            lines.push(`  - ${describeSkipReason(item.code)} (${item.code}): ${item.count}`);
+        });
+    } else {
+        lines.push('  (none)');
+    }
+
+    if (report.finalState) {
+        const rosterNames = Array.isArray(report.finalState.sceneRoster)
+            ? report.finalState.sceneRoster.map(name => {
+                const original = report.matches?.find(m => m.name?.toLowerCase() === name)?.name;
+                return original || name;
+            })
+            : [];
+        lines.push('');
+        lines.push('Final Stream State:');
+        lines.push(`  Scene roster (${rosterNames.length}): ${rosterNames.length ? rosterNames.join(', ') : '(empty)'}`);
+        lines.push(`  Last accepted name: ${report.finalState.lastAcceptedName || '(none)'}`);
+        lines.push(`  Last subject: ${report.finalState.lastSubject || '(none)'}`);
+        if (Number.isFinite(report.finalState.processedLength)) {
+            lines.push(`  Processed characters: ${report.finalState.processedLength}`);
+        }
+        if (Number.isFinite(report.finalState.virtualDurationMs)) {
+            lines.push(`  Simulated duration: ${report.finalState.virtualDurationMs} ms`);
+        }
+    }
+
+    if (Array.isArray(report.topCharacters)) {
+        lines.push('');
+        lines.push('Top Characters:');
+        if (report.topCharacters.length) {
+            report.topCharacters.slice(0, 4).forEach((entry, idx) => {
+                const rosterTag = entry.inSceneRoster ? ' [scene roster]' : '';
+                const scorePart = Number.isFinite(entry.score) ? ` (score ${entry.score})` : '';
+                lines.push(`  ${idx + 1}. ${entry.name} – ${entry.count} detections${rosterTag}${scorePart}`);
+            });
+        } else {
+            lines.push('  (none)');
+        }
     }
 
     if (report.profileSnapshot) {
@@ -738,7 +1319,9 @@ function createTesterMessageState(profile) {
 function simulateTesterStream(combined, profile, bufKey) {
     const events = [];
     const msgState = state.perMessageStates.get(bufKey);
-    if (!msgState) return events;
+    if (!msgState) {
+        return { events, finalState: null };
+    }
 
     const simulationState = {
         lastIssuedCostume: null,
@@ -748,7 +1331,7 @@ function simulateTesterStream(combined, profile, bufKey) {
     };
 
     const threshold = Math.max(0, Number(profile.tokenProcessThreshold) || 0);
-    const maxBuffer = Number(profile.maxBufferChars) > 0 ? profile.maxBufferChars : PROFILE_DEFAULTS.maxBufferChars;
+    const maxBuffer = resolveMaxBufferChars(profile);
     const rosterTTL = profile.sceneRosterTTL ?? PROFILE_DEFAULTS.sceneRosterTTL;
     const repeatSuppress = Number(profile.repeatSuppressMs) || 0;
     let buffer = '';
@@ -816,7 +1399,18 @@ function simulateTesterStream(combined, profile, bufKey) {
         }
     }
 
-    return events;
+    const finalState = {
+        lastAcceptedName: msgState.lastAcceptedName,
+        lastAcceptedTimestamp: msgState.lastAcceptedTs,
+        lastSubject: msgState.lastSubject,
+        processedLength: msgState.processedLength,
+        sceneRoster: Array.from(msgState.sceneRoster || []),
+        rosterTTL: msgState.rosterTTL,
+        vetoed: Boolean(msgState.vetoed),
+        virtualDurationMs: combined.length > 0 ? Math.max(0, (combined.length - 1) * 50) : 0,
+    };
+
+    return { events, finalState };
 }
 
 function renderTesterStream(eventList, events) {
@@ -855,10 +1449,12 @@ function testRegexPattern() {
     clearTesterTimers();
     state.lastTesterReport = null;
     updateTesterCopyButton();
+    updateTesterTopCharactersDisplay(null);
     $("#cs-test-veto-result").text('N/A').css('color', 'var(--text-color-soft)');
     const text = $("#cs-regex-test-input").val();
     if (!text) {
         $("#cs-test-all-detections, #cs-test-winner-list").html('<li class="cs-tester-list-placeholder">Enter text to test.</li>');
+        updateTesterTopCharactersDisplay(null);
         return;
     }
 
@@ -901,7 +1497,8 @@ function testRegexPattern() {
         allDetectionsList.html('<li class="cs-tester-list-placeholder">Message vetoed.</li>');
         const vetoEvents = [{ type: 'veto', match: vetoMatch, charIndex: combined.length - 1 }];
         renderTesterStream(streamList, vetoEvents);
-        state.lastTesterReport = { ...reportBase, vetoed: true, vetoMatch, events: vetoEvents, matches: [] };
+        state.lastTesterReport = { ...reportBase, vetoed: true, vetoMatch, events: vetoEvents, matches: [], topCharacters: [] };
+        updateTesterTopCharactersDisplay([]);
         updateTesterCopyButton();
     } else {
         $("#cs-test-veto-result").text('No veto phrases matched.').css('color', 'var(--green)');
@@ -918,14 +1515,34 @@ function testRegexPattern() {
         }
 
         resetTesterMessageState();
-        const events = simulateTesterStream(combined, tempProfile, bufKey);
+        const simulationResult = simulateTesterStream(combined, tempProfile, bufKey);
+        const events = Array.isArray(simulationResult?.events) ? simulationResult.events : [];
         renderTesterStream(streamList, events);
+        const testerRoster = simulationResult?.finalState?.sceneRoster || [];
+        const topCharacters = rankSceneCharacters(allMatches, { rosterSet: testerRoster });
+        updateTesterTopCharactersDisplay(topCharacters);
         state.lastTesterReport = {
             ...reportBase,
             vetoed: false,
             vetoMatch: null,
             matches: allMatches.map(m => ({ ...m })),
             events: events.map(e => ({ ...e })),
+            finalState: simulationResult?.finalState
+                ? {
+                    ...simulationResult.finalState,
+                    sceneRoster: Array.isArray(simulationResult.finalState.sceneRoster)
+                        ? [...simulationResult.finalState.sceneRoster]
+                        : [],
+                }
+                : null,
+            topCharacters: topCharacters.map(entry => ({
+                name: entry.name,
+                normalized: entry.normalized,
+                count: entry.count,
+                bestPriority: entry.bestPriority,
+                inSceneRoster: entry.inSceneRoster,
+                score: Number.isFinite(entry.score) ? Math.round(entry.score) : 0,
+            })),
         };
         updateTesterCopyButton();
     }
@@ -939,6 +1556,7 @@ function testRegexPattern() {
 
 function wireUI() {
     const settings = getSettings();
+    initTabNavigation();
     $(document).on('change', '#cs-enable', function() { settings.enabled = $(this).prop("checked"); persistSettings("Extension " + (settings.enabled ? "Enabled" : "Disabled"), 'info'); });
     $(document).on('click', '#cs-save', () => { 
         const profile = getActiveProfile();
@@ -951,20 +1569,59 @@ function wireUI() {
     });
     $(document).on('change', '#cs-profile-select', function() { loadProfile($(this).val()); });
     $(document).on('click', '#cs-profile-save', () => {
-        const newName = $("#cs-profile-name").val().trim(); if (!newName) return;
-        const oldName = settings.activeProfile;
-        if (newName !== oldName && settings.profiles[newName]) { showStatus("A profile with that name already exists.", 'error'); return; }
-        const profileData = saveCurrentProfileData();
-        if (newName !== oldName) {
-             settings.profiles[newName] = profileData;
-             settings.activeProfile = newName;
-             delete settings.profiles[oldName];
-        } else {
-            Object.assign(getActiveProfile(), profileData);
-        }
-        populateProfileDropdown();
+        const profile = getActiveProfile();
+        if (!profile) return;
+        Object.assign(profile, saveCurrentProfileData());
+        persistSettings('Profile saved.');
         loadProfile(settings.activeProfile);
-        persistSettings(`Profile saved as "${newName}"`);
+    });
+    $(document).on('click', '#cs-profile-saveas', () => {
+        const desiredName = normalizeProfileNameInput($("#cs-profile-name").val());
+        if (!desiredName) { showStatus('Enter a name to save a new profile.', 'error'); return; }
+        if (settings.profiles[desiredName]) { showStatus('A profile with that name already exists.', 'error'); return; }
+        const profileData = Object.assign({}, structuredClone(PROFILE_DEFAULTS), saveCurrentProfileData());
+        settings.profiles[desiredName] = profileData;
+        settings.activeProfile = desiredName;
+        populateProfileDropdown();
+        loadProfile(desiredName);
+        $("#cs-profile-name").val('');
+        persistSettings(`Saved a new profile as "${desiredName}".`);
+    });
+    $(document).on('click', '#cs-profile-rename', () => {
+        const newName = normalizeProfileNameInput($("#cs-profile-name").val());
+        const oldName = settings.activeProfile;
+        if (!newName) { showStatus('Enter a new name to rename this profile.', 'error'); return; }
+        if (newName === oldName) { showStatus('The profile already uses that name.', 'info'); return; }
+        if (settings.profiles[newName]) { showStatus('A profile with that name already exists.', 'error'); return; }
+        settings.profiles[newName] = settings.profiles[oldName];
+        delete settings.profiles[oldName];
+        settings.activeProfile = newName;
+        populateProfileDropdown();
+        loadProfile(newName);
+        $("#cs-profile-name").val('');
+        persistSettings(`Renamed profile to "${newName}".`, 'info');
+    });
+    $(document).on('click', '#cs-profile-new', () => {
+        const baseName = normalizeProfileNameInput($("#cs-profile-name").val()) || 'New Profile';
+        const uniqueName = getUniqueProfileName(baseName);
+        settings.profiles[uniqueName] = structuredClone(PROFILE_DEFAULTS);
+        settings.activeProfile = uniqueName;
+        populateProfileDropdown();
+        loadProfile(uniqueName);
+        $("#cs-profile-name").val('');
+        persistSettings(`Created profile "${uniqueName}" from defaults.`, 'info');
+    });
+    $(document).on('click', '#cs-profile-duplicate', () => {
+        const activeProfile = getActiveProfile();
+        if (!activeProfile) return;
+        const baseName = normalizeProfileNameInput($("#cs-profile-name").val()) || `${settings.activeProfile} Copy`;
+        const uniqueName = getUniqueProfileName(baseName);
+        settings.profiles[uniqueName] = Object.assign({}, structuredClone(PROFILE_DEFAULTS), structuredClone(activeProfile));
+        settings.activeProfile = uniqueName;
+        populateProfileDropdown();
+        loadProfile(uniqueName);
+        $("#cs-profile-name").val('');
+        persistSettings(`Duplicated profile as "${uniqueName}".`, 'info');
     });
     $(document).on('click', '#cs-profile-delete', () => {
         if (Object.keys(settings.profiles).length <= 1) { showStatus("Cannot delete the last profile.", 'error'); return; }
@@ -973,6 +1630,7 @@ function wireUI() {
             delete settings.profiles[profileNameToDelete];
             settings.activeProfile = Object.keys(settings.profiles)[0];
             populateProfileDropdown(); loadProfile(settings.activeProfile);
+            $("#cs-profile-name").val('');
             persistSettings(`Deleted profile "${profileNameToDelete}".`);
         }
     });
@@ -1094,6 +1752,20 @@ function logLastMessageStats() {
     });
     logOutput += "========================================";
 
+    const ranking = state.topSceneRanking instanceof Map
+        ? state.topSceneRanking.get(lastMessageId)
+        : null;
+    logOutput += "\n\nTop Ranked Characters:\n";
+    if (Array.isArray(ranking) && ranking.length) {
+        ranking.slice(0, 4).forEach((entry, idx) => {
+            const rosterTag = entry.inSceneRoster ? ' [scene roster]' : '';
+            const scorePart = Number.isFinite(entry.score) ? ` (score ${Math.round(entry.score)})` : '';
+            logOutput += `  ${idx + 1}. ${entry.name} – ${entry.count} detections${rosterTag}${scorePart}\n`;
+        });
+    } else {
+        logOutput += '  (none)\n';
+    }
+
     console.log(logOutput);
     showStatus("Last message stats logged to browser console (F12).", "success");
 }
@@ -1110,7 +1782,7 @@ function calculateFinalMessageStats(messageId) {
         if (!message || !message.mes) return;
         fullText = normalizeStreamText(message.mes);
     }
-    
+
     const allMatches = findAllMatches(fullText);
     const stats = new Map();
     allMatches.forEach(m => {
@@ -1119,6 +1791,16 @@ function calculateFinalMessageStats(messageId) {
     });
 
     state.messageStats.set(bufKey, stats);
+    if (!(state.topSceneRanking instanceof Map)) {
+        state.topSceneRanking = new Map();
+    }
+
+    const msgState = state.perMessageStates.get(bufKey);
+    const rosterSet = msgState?.sceneRoster instanceof Set ? msgState.sceneRoster : null;
+    const ranking = rankSceneCharacters(allMatches, { rosterSet });
+    state.topSceneRanking.set(bufKey, ranking);
+    updateSessionTopCharacters(bufKey, ranking);
+
     debugLog("Final stats calculated for", bufKey, stats);
 }
 
@@ -1127,6 +1809,19 @@ function calculateFinalMessageStats(messageId) {
 // SLASH COMMANDS
 // ======================================================================
 function registerCommands() {
+    const emitTopCharacters = (count, { silent } = {}) => {
+        const ranking = getLastTopCharacters(count);
+        if (!ranking.length) {
+            if (!silent) {
+                showStatus('No character detections available for the last message.', 'info');
+            }
+            return { text: '', hasData: false };
+        }
+
+        const list = ranking.map(entry => entry.name).join(', ');
+        return { text: list, hasData: true };
+    };
+
     registerSlashCommand("cs-addchar", (args) => {
         const profile = getActiveProfile();
         if (profile) {
@@ -1157,6 +1852,20 @@ function registerCommands() {
     registerSlashCommand("cs-stats", () => {
         logLastMessageStats();
     }, [], "Logs mention statistics for the last generated message to the console.", true);
+
+    registerSlashCommand("cs-top", (args) => {
+        const desired = Number(args?.[0]);
+        const count = Number.isFinite(desired) ? desired : 4;
+        const result = emitTopCharacters(count);
+        return result.text;
+    }, ["count?"], "Returns a comma-separated list of the top detected characters from the last message (1-4).", true);
+
+    [1, 2, 3, 4].forEach((num) => {
+        registerSlashCommand(`cs-top${num}`, () => {
+            const result = emitTopCharacters(num, { silent: true });
+            return result.text;
+        }, [], `Shortcut for the top ${num} detected character${num > 1 ? 's' : ''} from the last message.`, true);
+    });
 }
 
 // ======================================================================
@@ -1211,7 +1920,8 @@ const handleStream = (...args) => {
         if (msgState.vetoed) return;
 
         const prev = state.perMessageBuffers.get(bufKey) || "";
-        const combined = (prev + normalizeStreamText(tokenText)).slice(-profile.maxBufferChars);
+        const maxBuffer = resolveMaxBufferChars(profile);
+        const combined = (prev + normalizeStreamText(tokenText)).slice(-maxBuffer);
         state.perMessageBuffers.set(bufKey, combined);
         
         if (combined.length < msgState.processedLength + profile.tokenProcessThreshold) {
@@ -1278,7 +1988,10 @@ const resetGlobalState = () => {
         perMessageBuffers: new Map(),
         perMessageStates: new Map(),
         messageStats: new Map(),
+        topSceneRanking: new Map(),
+        latestTopRanking: { bufKey: null, ranking: [], fullRanking: [], updatedAt: Date.now() },
     });
+    clearSessionTopCharacters();
 };
 
 function load() {
@@ -1323,7 +2036,21 @@ function getSettingsObj() {
     for (const profileName in storeSource[extensionName].profiles) {
         storeSource[extensionName].profiles[profileName] = Object.assign({}, structuredClone(PROFILE_DEFAULTS), storeSource[extensionName].profiles[profileName]);
     }
-    
+
+    const sessionDefaults = {
+        topCharacters: [],
+        topCharactersNormalized: [],
+        topCharactersString: '',
+        topCharacterDetails: [],
+        lastMessageKey: null,
+        lastUpdated: 0,
+    };
+    if (typeof storeSource[extensionName].session !== 'object' || storeSource[extensionName].session === null) {
+        storeSource[extensionName].session = { ...sessionDefaults };
+    } else {
+        storeSource[extensionName].session = Object.assign({}, sessionDefaults, storeSource[extensionName].session);
+    }
+
     return { store: storeSource, save: ctx.saveSettingsDebounced, ctx };
 }
 
@@ -1331,9 +2058,12 @@ jQuery(async () => {
     try {
         const { store } = getSettingsObj();
         extension_settings[extensionName] = store[extensionName];
-        
+
         const settingsHtml = await $.get(`${extensionFolderPath}/settings.html`);
         $("#extensions_settings").append(settingsHtml);
+
+        const buildMeta = await fetchBuildMetadata();
+        renderBuildMetadata(buildMeta);
 
         populateProfileDropdown();
         populatePresetDropdown();
@@ -1341,9 +2071,9 @@ jQuery(async () => {
         wireUI();
         registerCommands();
         load();
-        
+
         window[`__${extensionName}_unload`] = unload;
-        console.log(`${logPrefix} v2.1.2 loaded successfully.`);
+        console.log(`${logPrefix} ${buildMeta?.label || 'dev build'} loaded successfully.`);
     } catch (error) {
         console.error(`${logPrefix} failed to initialize:`, error);
         alert(`Failed to initialize Costume Switcher. Check console (F12) for details.`);
