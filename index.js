@@ -1842,10 +1842,20 @@ function registerCommands() {
 
     registerSlashCommand("cs-map", (args) => {
         const profile = getActiveProfile();
-        const [alias, , folder] = args;
-        if (profile && alias && folder) {
-            profile.mappings.push({ name: alias, folder: folder });
-            showStatus(`Mapped "<b>${alias}</b>" to "<b>${folder}</b>" for this session.`, 'success');
+        const toIndex = args.map(arg => arg.toLowerCase()).indexOf('to');
+
+        if (profile && toIndex > 0 && toIndex < args.length - 1) {
+            const alias = args.slice(0, toIndex).join(' ').trim();
+            const folder = args.slice(toIndex + 1).join(' ').trim();
+            
+            if (alias && folder) {
+                profile.mappings.push({ name: alias, folder: folder });
+                showStatus(`Mapped "<b>${alias}</b>" to "<b>${folder}</b>" for this session.`, 'success');
+            } else {
+                showStatus('Invalid format. Use /cs-map (alias) to (folder).', 'error');
+            }
+        } else {
+            showStatus('Invalid format. Use /cs-map (alias) to (folder).', 'error');
         }
     }, ["alias", "to", "folder"], "Maps a character alias to a costume folder for this session. Use 'to' to separate.", true);
     
