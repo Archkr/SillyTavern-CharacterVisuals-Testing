@@ -112,6 +112,7 @@ const state = {
     buildMeta: null,
     topSceneRanking: new Map(),
     latestTopRanking: { bufKey: null, ranking: [], fullRanking: [], updatedAt: 0 },
+    currentGenerationKey: null,
 };
 
 const TAB_STORAGE_KEY = `${extensionName}-active-tab`;
@@ -1868,16 +1869,15 @@ function registerCommands() {
 // ======================================================================
 // EVENT HANDLERS
 // ======================================================================
-const handleGenerationStart = (messageId) => {
-    const bufKey = messageId != null ? `m${messageId}` : 'live';
-    debugLog(`Generation started for ${bufKey}, resetting state.`);
-    
-    const profile = getActiveProfile();
+
+function createMessageState(profile, bufKey) {
+    if (!profile || !bufKey) return null;
+
     const oldState = state.perMessageStates.size > 0 ? Array.from(state.perMessageStates.values()).pop() : null;
-    
-    const newState = { 
-        lastAcceptedName: null, 
-        lastAcceptedTs: 0, 
+
+    const newState = {
+        lastAcceptedName: null,
+        lastAcceptedTs: 0,
         vetoed: false,
         lastSubject: oldState?.lastSubject || null,
         sceneRoster: new Set(oldState?.sceneRoster || []),
@@ -1892,9 +1892,84 @@ const handleGenerationStart = (messageId) => {
             newState.sceneRoster.clear();
         }
     }
-    
+
     state.perMessageStates.set(bufKey, newState);
-    state.perMessageBuffers.set(bufKey, ''); // Explicitly clear/set buffer
+    state.perMessageBuffers.set(bufKey, '');
+
+    return newState;
+}
+
+function remapMessageKey(oldKey, newKey) {
+    if (!oldKey || !newKey || oldKey === newKey) return;
+
+    const moveEntry = (map) => {
+        if (!(map instanceof Map) || !map.has(oldKey)) return;
+        const value = map.get(oldKey);
+        map.delete(oldKey);
+        map.set(newKey, value);
+    };
+
+    moveEntry(state.perMessageBuffers);
+    moveEntry(state.perMessageStates);
+    moveEntry(state.messageStats);
+
+    if (state.topSceneRanking instanceof Map) {
+        moveEntry(state.topSceneRanking);
+    }
+
+    if (state.latestTopRanking?.bufKey === oldKey) {
+        state.latestTopRanking.bufKey = newKey;
+    }
+
+    const settings = getSettings?.();
+    if (settings?.session && settings.session.lastMessageKey === oldKey) {
+        settings.session.lastMessageKey = newKey;
+    }
+
+    debugLog(`Remapped message data from ${oldKey} to ${newKey}.`);
+}
+
+const handleGenerationStart = (...args) => {
+    let bufKey = null;
+    for (const arg of args) {
+        if (typeof arg === 'string' && arg.trim().length) {
+            bufKey = arg.trim();
+            break;
+        }
+        if (typeof arg === 'number' && Number.isFinite(arg)) {
+            bufKey = `m${arg}`;
+            break;
+        }
+        if (arg && typeof arg === 'object') {
+            if (typeof arg.generationType === 'string' && arg.generationType.trim().length) {
+                bufKey = arg.generationType.trim();
+                break;
+            }
+            if (typeof arg.messageId === 'number' && Number.isFinite(arg.messageId)) {
+                bufKey = `m${arg.messageId}`;
+                break;
+            }
+            if (typeof arg.key === 'string' && arg.key.trim().length) {
+                bufKey = arg.key.trim();
+                break;
+            }
+        }
+    }
+
+    if (!bufKey) {
+        bufKey = 'live';
+    }
+
+    state.currentGenerationKey = bufKey;
+    debugLog(`Generation started for ${bufKey}, resetting state.`);
+
+    const profile = getActiveProfile();
+    if (profile) {
+        createMessageState(profile, bufKey);
+    } else {
+        state.perMessageStates.delete(bufKey);
+        state.perMessageBuffers.set(bufKey, '');
+    }
 };
 
 const handleStream = (...args) => {
@@ -1904,16 +1979,21 @@ const handleStream = (...args) => {
         const profile = getActiveProfile();
         if (!profile) return;
 
-        let tokenText = "", messageId = null;
-        if (typeof args[0] === 'number') { messageId = args[0]; tokenText = String(args[1] ?? ""); } 
-        else if (typeof args[0] === 'object') { tokenText = String(args[0].token ?? args[0].text ?? ""); messageId = args[0].messageId ?? args[1] ?? null; } 
+        let tokenText = "";
+        if (typeof args[0] === 'number') { tokenText = String(args[1] ?? ""); }
+        else if (typeof args[0] === 'object') { tokenText = String(args[0].token ?? args[0].text ?? ""); }
         else { tokenText = String(args.join(' ') || ""); }
         if (!tokenText) return;
 
-        const bufKey = messageId != null ? `m${messageId}` : 'live';
-        if (!state.perMessageStates.has(bufKey)) handleGenerationStart(messageId);
-        
-        const msgState = state.perMessageStates.get(bufKey);
+        const bufKey = state.currentGenerationKey;
+        if (!bufKey) return;
+
+        let msgState = state.perMessageStates.get(bufKey);
+        if (!msgState) {
+            msgState = createMessageState(profile, bufKey);
+        }
+        if (!msgState) return;
+
         if (msgState.vetoed) return;
 
         const prev = state.perMessageBuffers.get(bufKey) || "";
@@ -1959,11 +2039,19 @@ const handleStream = (...args) => {
 };
 
 const handleMessageRendered = (messageId) => {
-    if (messageId != null) {
-        const bufKey = `m${messageId}`;
-        debugLog(`Message ${messageId} rendered, calculating final stats from buffer.`);
-        calculateFinalMessageStats(messageId);
+    if (messageId == null) return;
+
+    const finalKey = `m${messageId}`;
+    const tempKey = state.currentGenerationKey;
+
+    if (tempKey && tempKey !== finalKey) {
+        remapMessageKey(tempKey, finalKey);
     }
+
+    state.currentGenerationKey = null;
+
+    debugLog(`Message ${messageId} rendered, calculating final stats from buffer.`);
+    calculateFinalMessageStats(messageId);
 };
 
 const resetGlobalState = () => {
@@ -1987,6 +2075,7 @@ const resetGlobalState = () => {
         messageStats: new Map(),
         topSceneRanking: new Map(),
         latestTopRanking: { bufKey: null, ranking: [], fullRanking: [], updatedAt: Date.now() },
+        currentGenerationKey: null,
     });
     clearSessionTopCharacters();
 };
