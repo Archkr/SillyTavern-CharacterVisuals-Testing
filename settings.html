@@ -81,6 +81,24 @@
             <section class="cs-card">
               <header class="cs-card-header">
                 <div class="cs-card-title">
+                  <i class="fa-solid fa-wand-magic-sparkles"></i>
+                  <div>
+                    <h3>Quick Presets</h3>
+                    <p>Apply a curated detector setup to the current profile.</p>
+                  </div>
+                </div>
+              </header>
+              <div class="cs-card-body cs-card-body--stacked">
+                <div class="cs-toolbar">
+                  <select id="cs-preset-select" class="text_pole" style="flex: 1 1 auto;" title="Pick a preset to review its settings before applying."></select>
+                  <button id="cs-preset-load" class="menu_button interactable cs-button-primary" title="Apply the selected preset to this profile.">Apply Preset</button>
+                </div>
+                <p id="cs-preset-description" class="cs-helper-text">Load a recommended configuration into the current profile.</p>
+              </div>
+            </section>
+            <section class="cs-card">
+              <header class="cs-card-header">
+                <div class="cs-card-title">
                   <i class="fa-solid fa-lock"></i>
                   <div>
                     <h3>Manual Overrides</h3>
