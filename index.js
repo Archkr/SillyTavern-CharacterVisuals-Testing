@@ -2057,8 +2057,10 @@ function registerCommands() {
         const desired = Number(args?.[0]);
         const count = clampTopCount(Number.isFinite(desired) ? desired : 4);
         const names = getTopCharacterNamesString(count);
-        return names || emptyTopCharactersMessage;
-    }, ["count?"], "Returns a comma-separated list of the top detected characters from the last message (1-4).", true);
+        const message = names || emptyTopCharactersMessage;
+        console.log(`${logPrefix} ${message}`);
+        return names || message;
+    }, ["count?"], "Returns a comma-separated list of the top detected characters from the last message (1-4) and logs the result to the console.", true);
 
     [1, 2, 3, 4].forEach((num) => {
         registerSlashCommand(`cs-top${num}`, () => {
