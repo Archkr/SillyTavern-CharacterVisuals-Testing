@@ -128,6 +128,16 @@ const PROFILE_DEFAULTS = {
     detectionBias: 0,
     enableSceneRoster: true,
     sceneRosterTTL: 5,
+    prioritySpeakerWeight: 5,
+    priorityAttributionWeight: 4,
+    priorityActionWeight: 3,
+    priorityPronounWeight: 2,
+    priorityVocativeWeight: 2,
+    priorityPossessiveWeight: 1,
+    priorityNameWeight: 0,
+    rosterBonus: 150,
+    rosterPriorityDropoff: 0.5,
+    distancePenaltyWeight: 1,
 };
 
 const DEFAULTS = {
@@ -142,6 +152,8 @@ const DEFAULTS = {
 // ======================================================================
 // GLOBAL STATE
 // ======================================================================
+const MAX_TRACKED_MESSAGES = 24;
+
 const state = {
     lastIssuedCostume: null,
     lastSwitchTimestamp: 0,
@@ -160,6 +172,7 @@ const state = {
     latestTopRanking: { bufKey: null, ranking: [], fullRanking: [], updatedAt: 0 },
     currentGenerationKey: null,
     mappingLookup: new Map(),
+    messageKeyQueue: [],
 };
 
 const TAB_STORAGE_KEY = `${extensionName}-active-tab`;
@@ -252,6 +265,59 @@ function initTabNavigation() {
             activateTab(nextButton.dataset.tab, { focusButton: true });
         }
     });
+}
+
+function ensureMessageQueue() {
+    if (!Array.isArray(state.messageKeyQueue)) {
+        state.messageKeyQueue = [];
+    }
+    return state.messageKeyQueue;
+}
+
+function trackMessageKey(key) {
+    const normalized = normalizeMessageKey(key);
+    if (!normalized) return;
+    const queue = ensureMessageQueue();
+    const existingIndex = queue.indexOf(normalized);
+    if (existingIndex !== -1) {
+        queue.splice(existingIndex, 1);
+    }
+    queue.push(normalized);
+}
+
+function replaceTrackedMessageKey(oldKey, newKey) {
+    const normalizedOld = normalizeMessageKey(oldKey);
+    const normalizedNew = normalizeMessageKey(newKey);
+    if (!normalizedNew) return;
+    const queue = ensureMessageQueue();
+    if (normalizedOld) {
+        const index = queue.indexOf(normalizedOld);
+        if (index !== -1) {
+            queue[index] = normalizedNew;
+            for (let i = queue.length - 1; i >= 0; i -= 1) {
+                if (i !== index && queue[i] === normalizedNew) {
+                    queue.splice(i, 1);
+                }
+            }
+            return;
+        }
+    }
+    trackMessageKey(normalizedNew);
+}
+
+function pruneMessageCaches(limit = MAX_TRACKED_MESSAGES) {
+    const queue = ensureMessageQueue();
+    const maxEntries = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : MAX_TRACKED_MESSAGES;
+    while (queue.length > maxEntries) {
+        const oldest = queue.shift();
+        if (!oldest) continue;
+        state.perMessageBuffers?.delete(oldest);
+        state.perMessageStates?.delete(oldest);
+        state.messageStats?.delete(oldest);
+        if (state.topSceneRanking instanceof Map) {
+            state.topSceneRanking.delete(oldest);
+        }
+    }
 }
 
 // ======================================================================
@@ -373,6 +439,24 @@ function findMatches(text, regex, quoteRanges, searchInsideQuotes = false) {
     return results;
 }
 
+const PRIORITY_FIELD_MAP = {
+    speaker: 'prioritySpeakerWeight',
+    attribution: 'priorityAttributionWeight',
+    action: 'priorityActionWeight',
+    pronoun: 'priorityPronounWeight',
+    vocative: 'priorityVocativeWeight',
+    possessive: 'priorityPossessiveWeight',
+    name: 'priorityNameWeight',
+};
+
+function getPriorityWeights(profile) {
+    const weights = {};
+    for (const [key, field] of Object.entries(PRIORITY_FIELD_MAP)) {
+        weights[key] = resolveNumericSetting(profile?.[field], PROFILE_DEFAULTS[field]);
+    }
+    return weights;
+}
+
 function findAllMatches(combined) {
     const allMatches = [];
     const profile = getActiveProfile();
@@ -380,7 +464,7 @@ function findAllMatches(combined) {
     if (!profile || !combined) return allMatches;
 
     const quoteRanges = getQuoteRanges(combined);
-    const priorities = { speaker: 5, attribution: 4, action: 3, pronoun: 2, vocative: 2, possessive: 1, name: 0 };
+    const priorities = getPriorityWeights(profile);
 
     if (compiledRegexes.speakerRegex) {
         findMatches(combined, compiledRegexes.speakerRegex, quoteRanges).forEach(m => {
@@ -442,7 +526,15 @@ function findBestMatch(combined, precomputedMatches = null) {
         }
     }
 
-    return getWinner(allMatches, profile.detectionBias, combined.length, { rosterSet });
+    const scoringOptions = {
+        rosterSet,
+        rosterBonus: resolveNumericSetting(profile?.rosterBonus, PROFILE_DEFAULTS.rosterBonus),
+        rosterPriorityDropoff: resolveNumericSetting(profile?.rosterPriorityDropoff, PROFILE_DEFAULTS.rosterPriorityDropoff),
+        distancePenaltyWeight: resolveNumericSetting(profile?.distancePenaltyWeight, PROFILE_DEFAULTS.distancePenaltyWeight),
+        priorityMultiplier: 100,
+    };
+
+    return getWinner(allMatches, profile.detectionBias, combined.length, scoringOptions);
 }
 
 function getWinner(matches, bias = 0, textLength = 0, options = {}) {
@@ -451,12 +543,18 @@ function getWinner(matches, bias = 0, textLength = 0, options = {}) {
     const rosterPriorityDropoff = Number.isFinite(options?.rosterPriorityDropoff)
         ? options.rosterPriorityDropoff
         : 0.5;
+    const distancePenaltyWeight = Number.isFinite(options?.distancePenaltyWeight)
+        ? options.distancePenaltyWeight
+        : 1;
+    const priorityMultiplier = Number.isFinite(options?.priorityMultiplier)
+        ? options.priorityMultiplier
+        : 100;
     const scoredMatches = matches.map(match => {
         const isActive = match.priority >= 3; // speaker, attribution, action
         const distanceFromEnd = Number.isFinite(textLength)
             ? Math.max(0, textLength - match.matchIndex)
             : 0;
-        const baseScore = match.priority * 100 - distanceFromEnd;
+        const baseScore = match.priority * priorityMultiplier - distancePenaltyWeight * distanceFromEnd;
         let score = baseScore + (isActive ? bias : 0);
         if (rosterSet) {
             const normalized = String(match.name || '').toLowerCase();
@@ -535,11 +633,22 @@ function rankSceneCharacters(matches, options = {}) {
         }
     });
 
+    const profile = options?.profile || getActiveProfile();
+    const distancePenaltyWeight = Number.isFinite(options?.distancePenaltyWeight)
+        ? options.distancePenaltyWeight
+        : resolveNumericSetting(profile?.distancePenaltyWeight, PROFILE_DEFAULTS.distancePenaltyWeight);
+    const rosterBonusWeight = Number.isFinite(options?.rosterBonus)
+        ? options.rosterBonus
+        : resolveNumericSetting(profile?.rosterBonus, PROFILE_DEFAULTS.rosterBonus);
+    const countWeight = Number.isFinite(options?.countWeight) ? options.countWeight : 1000;
+    const priorityMultiplier = Number.isFinite(options?.priorityMultiplier) ? options.priorityMultiplier : 100;
+
     const ranked = Array.from(summary.values()).map((entry) => {
         const priorityScore = Number.isFinite(entry.bestPriority) ? entry.bestPriority : 0;
         const earliest = Number.isFinite(entry.earliest) ? entry.earliest : Number.MAX_SAFE_INTEGER;
-        const rosterBonus = entry.inSceneRoster ? 50 : 0;
-        const score = entry.count * 1000 + priorityScore * 100 + rosterBonus - earliest;
+        const rosterBonus = entry.inSceneRoster ? rosterBonusWeight : 0;
+        const earliestPenalty = earliest * distancePenaltyWeight;
+        const score = entry.count * countWeight + priorityScore * priorityMultiplier + rosterBonus - earliestPenalty;
         return {
             name: entry.name,
             normalized: entry.normalized,
@@ -893,6 +1002,16 @@ const uiMapping = {
     pronounVocabulary: { selector: '#cs-pronoun-vocabulary', type: 'csvTextarea' },
     enableSceneRoster: { selector: '#cs-scene-roster-enable', type: 'checkbox' },
     sceneRosterTTL: { selector: '#cs-scene-roster-ttl', type: 'number' },
+    prioritySpeakerWeight: { selector: '#cs-priority-speaker', type: 'number' },
+    priorityAttributionWeight: { selector: '#cs-priority-attribution', type: 'number' },
+    priorityActionWeight: { selector: '#cs-priority-action', type: 'number' },
+    priorityPronounWeight: { selector: '#cs-priority-pronoun', type: 'number' },
+    priorityVocativeWeight: { selector: '#cs-priority-vocative', type: 'number' },
+    priorityPossessiveWeight: { selector: '#cs-priority-possessive', type: 'number' },
+    priorityNameWeight: { selector: '#cs-priority-name', type: 'number' },
+    rosterBonus: { selector: '#cs-roster-bonus', type: 'number' },
+    rosterPriorityDropoff: { selector: '#cs-roster-dropoff', type: 'number' },
+    distancePenaltyWeight: { selector: '#cs-distance-penalty', type: 'number' },
 };
 
 function normalizeProfileNameInput(name) {
@@ -918,6 +1037,11 @@ function resolveMaxBufferChars(profile) {
         return raw;
     }
     return PROFILE_DEFAULTS.maxBufferChars;
+}
+
+function resolveNumericSetting(value, fallback) {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : fallback;
 }
 
 function populateProfileDropdown() {
@@ -958,6 +1082,52 @@ function updateFocusLockUI() {
         lockSelect.val('').prop("disabled", false);
         lockToggle.text("Lock");
     }
+}
+
+function syncProfileFieldsToUI(profile, fields = []) {
+    if (!profile || !Array.isArray(fields)) return;
+    fields.forEach((key) => {
+        const mapping = uiMapping[key];
+        if (!mapping) return;
+        const field = $(mapping.selector);
+        if (!field.length) return;
+        const value = profile[key];
+        switch (mapping.type) {
+            case 'checkbox':
+                field.prop('checked', !!value);
+                break;
+            case 'textarea':
+                field.val(Array.isArray(value) ? value.join('\n') : '');
+                break;
+            case 'csvTextarea':
+                field.val(Array.isArray(value) ? value.join(', ') : '');
+                break;
+            default:
+                field.val(value ?? '');
+                break;
+        }
+    });
+}
+
+function applyCommandProfileUpdates(profile, fields, { persist = false } = {}) {
+    syncProfileFieldsToUI(profile, Array.isArray(fields) ? fields : []);
+    if (persist) {
+        saveSettingsDebounced?.();
+    }
+}
+
+function parseCommandFlags(args = []) {
+    const cleanArgs = [];
+    let persist = false;
+    args.forEach((arg) => {
+        const normalized = String(arg ?? '').trim().toLowerCase();
+        if (['--persist', '--save', '-p'].includes(normalized)) {
+            persist = true;
+        } else {
+            cleanArgs.push(arg);
+        }
+    });
+    return { args: cleanArgs, persist };
 }
 
 function loadProfile(profileName) {
@@ -1017,7 +1187,7 @@ function saveCurrentProfileData() {
                 break;
             case 'number':
             case 'range': {
-                const parsed = parseInt(field.val(), 10);
+                const parsed = parseFloat(field.val());
                 const fallback = PROFILE_DEFAULTS[key] ?? 0;
                 value = Number.isFinite(parsed) ? parsed : fallback;
                 break;
@@ -1626,12 +1796,14 @@ function testRegexPattern() {
 
     const originalPerMessageStates = state.perMessageStates;
     const originalPerMessageBuffers = state.perMessageBuffers;
+    const originalMessageKeyQueue = Array.isArray(state.messageKeyQueue) ? [...state.messageKeyQueue] : [];
     const bufKey = tempProfileName;
 
     const resetTesterMessageState = () => {
         const testerState = createTesterMessageState(tempProfile);
         state.perMessageStates = new Map([[bufKey, testerState]]);
         state.perMessageBuffers = new Map([[bufKey, '']]);
+        state.messageKeyQueue = [bufKey];
         return testerState;
     };
 
@@ -1678,7 +1850,13 @@ function testRegexPattern() {
         const events = Array.isArray(simulationResult?.events) ? simulationResult.events : [];
         renderTesterStream(streamList, events);
         const testerRoster = simulationResult?.finalState?.sceneRoster || [];
-        const topCharacters = rankSceneCharacters(allMatches, { rosterSet: testerRoster });
+        const topCharacters = rankSceneCharacters(allMatches, {
+            rosterSet: testerRoster,
+            profile: tempProfile,
+            distancePenaltyWeight: resolveNumericSetting(tempProfile?.distancePenaltyWeight, PROFILE_DEFAULTS.distancePenaltyWeight),
+            rosterBonus: resolveNumericSetting(tempProfile?.rosterBonus, PROFILE_DEFAULTS.rosterBonus),
+            priorityMultiplier: 100,
+        });
         updateTesterTopCharactersDisplay(topCharacters);
         state.lastTesterReport = {
             ...reportBase,
@@ -1708,6 +1886,7 @@ function testRegexPattern() {
 
     state.perMessageStates = originalPerMessageStates;
     state.perMessageBuffers = originalPerMessageBuffers;
+    state.messageKeyQueue = originalMessageKeyQueue;
     delete settings.profiles[tempProfileName];
     settings.activeProfile = originalProfileName;
     loadProfile(originalProfileName);
@@ -2080,12 +2259,19 @@ function updateMessageAnalytics(bufKey, text, { rosterSet, updateSession = true,
     }
 
     const normalizedText = typeof text === 'string' ? (assumeNormalized ? text : normalizeStreamText(text)) : '';
+    const profile = getActiveProfile();
     const matches = normalizedText ? findAllMatches(normalizedText) : [];
     const stats = summarizeMatches(matches);
 
     state.messageStats.set(bufKey, stats);
 
-    const ranking = rankSceneCharacters(matches, { rosterSet });
+    const ranking = rankSceneCharacters(matches, {
+        rosterSet,
+        profile,
+        distancePenaltyWeight: resolveNumericSetting(profile?.distancePenaltyWeight, PROFILE_DEFAULTS.distancePenaltyWeight),
+        rosterBonus: resolveNumericSetting(profile?.rosterBonus, PROFILE_DEFAULTS.rosterBonus),
+        priorityMultiplier: 100,
+    });
     state.topSceneRanking.set(bufKey, ranking);
 
     if (updateSession !== false) {
@@ -2103,6 +2289,8 @@ function calculateFinalMessageStats(reference) {
         debugLog("Could not resolve message key to calculate stats for:", reference);
         return;
     }
+
+    trackMessageKey(bufKey);
 
     const resolvedMessageId = Number.isFinite(messageId) ? messageId : extractMessageIdFromKey(bufKey);
 
@@ -2148,47 +2336,65 @@ function registerCommands() {
 
     registerSlashCommand("cs-addchar", (args) => {
         const profile = getActiveProfile();
-        const name = String(args?.join(' ') ?? '').trim();
+        const { args: cleanArgs, persist } = parseCommandFlags(args || []);
+        const name = String(cleanArgs?.join(' ') ?? '').trim();
         if (profile && name) {
             profile.patterns.push(name);
             recompileRegexes();
-            showStatus(`Added "<b>${escapeHtml(name)}</b>" to patterns for this session.`, 'success');
+            applyCommandProfileUpdates(profile, ['patterns'], { persist });
+            updateFocusLockUI();
+            const message = persist
+                ? `Added "<b>${escapeHtml(name)}</b>" to patterns and saved the profile.`
+                : `Added "<b>${escapeHtml(name)}</b>" to patterns for this session.`;
+            showStatus(message, 'success');
         } else if (profile) {
             showStatus('Please provide a character name to add.', 'error');
         }
-    }, ["char"], "Adds a character to the current profile's pattern list for this session.", true);
+    }, ["char"], "Adds a character to the current profile's pattern list. Append --persist to save immediately.", true);
 
     registerSlashCommand("cs-ignore", (args) => {
         const profile = getActiveProfile();
-        const name = String(args?.join(' ') ?? '').trim();
+        const { args: cleanArgs, persist } = parseCommandFlags(args || []);
+        const name = String(cleanArgs?.join(' ') ?? '').trim();
         if (profile && name) {
             profile.ignorePatterns.push(name);
             recompileRegexes();
-            showStatus(`Ignoring "<b>${escapeHtml(name)}</b>" for this session.`, 'success');
+            applyCommandProfileUpdates(profile, ['ignorePatterns'], { persist });
+            const message = persist
+                ? `Ignoring "<b>${escapeHtml(name)}</b>" and saved the profile.`
+                : `Ignoring "<b>${escapeHtml(name)}</b>" for this session.`;
+            showStatus(message, 'success');
         } else if (profile) {
             showStatus('Please provide a character name to ignore.', 'error');
         }
-    }, ["char"], "Adds a character to the current profile's ignore list for this session.", true);
+    }, ["char"], "Adds a character to the current profile's ignore list. Append --persist to save immediately.", true);
 
     registerSlashCommand("cs-map", (args) => {
         const profile = getActiveProfile();
-        const toIndex = args.map(arg => arg.toLowerCase()).indexOf('to');
+        const { args: cleanArgs, persist } = parseCommandFlags(args || []);
+        const lowered = cleanArgs.map(arg => String(arg ?? '').toLowerCase());
+        const toIndex = lowered.indexOf('to');
 
-        if (profile && toIndex > 0 && toIndex < args.length - 1) {
-            const alias = args.slice(0, toIndex).join(' ').trim();
-            const folder = args.slice(toIndex + 1).join(' ').trim();
-            
+        if (profile && toIndex > 0 && toIndex < cleanArgs.length - 1) {
+            const alias = cleanArgs.slice(0, toIndex).join(' ').trim();
+            const folder = cleanArgs.slice(toIndex + 1).join(' ').trim();
+
             if (alias && folder) {
                 profile.mappings.push({ name: alias, folder: folder });
                 rebuildMappingLookup(profile);
-                showStatus(`Mapped "<b>${escapeHtml(alias)}</b>" to "<b>${escapeHtml(folder)}</b>" for this session.`, 'success');
+                renderMappings(profile);
+                applyCommandProfileUpdates(profile, [], { persist });
+                const message = persist
+                    ? `Mapped "<b>${escapeHtml(alias)}</b>" to "<b>${escapeHtml(folder)}</b>" and saved the profile.`
+                    : `Mapped "<b>${escapeHtml(alias)}</b>" to "<b>${escapeHtml(folder)}</b>" for this session.`;
+                showStatus(message, 'success');
             } else {
                 showStatus('Invalid format. Use /cs-map (alias) to (folder).', 'error');
             }
         } else {
             showStatus('Invalid format. Use /cs-map (alias) to (folder).', 'error');
         }
-    }, ["alias", "to", "folder"], "Maps a character alias to a costume folder for this session. Use 'to' to separate.", true);
+    }, ["alias", "to", "folder"], "Maps a character alias to a costume folder. Append --persist to save immediately.", true);
     
     registerSlashCommand("cs-stats", () => {
         return logLastMessageStats();
@@ -2240,6 +2446,7 @@ function createMessageState(profile, bufKey) {
 
     state.perMessageStates.set(bufKey, newState);
     state.perMessageBuffers.set(bufKey, '');
+    trackMessageKey(bufKey);
 
     return newState;
 }
@@ -2270,6 +2477,8 @@ function remapMessageKey(oldKey, newKey) {
     if (settings?.session && settings.session.lastMessageKey === oldKey) {
         settings.session.lastMessageKey = newKey;
     }
+
+    replaceTrackedMessageKey(oldKey, newKey);
 
     debugLog(`Remapped message data from ${oldKey} to ${newKey}.`);
 }
@@ -2424,6 +2633,7 @@ const handleMessageRendered = (...args) => {
 
     debugLog(`Message ${finalKey} rendered, calculating final stats from buffer.`);
     calculateFinalMessageStats({ key: finalKey, messageId: resolvedId });
+    pruneMessageCaches();
     state.currentGenerationKey = null;
 };
 
@@ -2449,6 +2659,7 @@ const resetGlobalState = () => {
         topSceneRanking: new Map(),
         latestTopRanking: { bufKey: null, ranking: [], fullRanking: [], updatedAt: Date.now() },
         currentGenerationKey: null,
+        messageKeyQueue: [],
     });
     clearSessionTopCharacters();
 };
