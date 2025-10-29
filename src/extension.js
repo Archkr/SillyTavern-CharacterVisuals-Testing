@@ -982,21 +982,6 @@ function refreshCoverageFromLastReport() {
     }
 }
 
-function mergeUniqueList(target = [], additions = []) {
-    const list = Array.isArray(target) ? [...target] : [];
-    const seen = new Set(list.map(item => String(item).toLowerCase()));
-    (additions || []).forEach((item) => {
-        const value = String(item || '').trim();
-        if (!value) return;
-        const lower = value.toLowerCase();
-        if (!seen.has(lower)) {
-            list.push(value);
-            seen.add(lower);
-        }
-    });
-    return list;
-}
-
 function copyTextToClipboard(text) {
     if (typeof navigator !== 'undefined' && navigator?.clipboard?.writeText) {
         return navigator.clipboard.writeText(text).catch(() => fallbackCopy());
