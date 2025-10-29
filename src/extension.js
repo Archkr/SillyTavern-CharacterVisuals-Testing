@@ -2162,16 +2162,6 @@ function findExistingMessageKey(preferredKey, messageId) {
     return candidates[0] || null;
 }
 
-function summarizeMatches(matches) {
-    const stats = new Map();
-    matches.forEach((match) => {
-        const normalizedName = normalizeCostumeName(match.name);
-        if (!normalizedName) return;
-        stats.set(normalizedName, (stats.get(normalizedName) || 0) + 1);
-    });
-    return stats;
-}
-
 function updateMessageAnalytics(bufKey, text, { rosterSet, updateSession = true, assumeNormalized = false } = {}) {
     if (!bufKey) {
         return { stats: new Map(), ranking: [] };
