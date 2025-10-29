@@ -2,11 +2,62 @@ import {
     DEFAULT_PRONOUNS,
     PROFILE_DEFAULTS,
     UNICODE_WORD_PATTERN,
+    logPrefix,
 } from "./constants.js";
 import { state } from "./state.js";
 import { getActiveProfile } from "./settings.js";
-import { normalizeCostumeName } from "./utils.js";
+import { normalizeCostumeName, escapeHtml } from "./utils.js";
 import { showStatus } from "./status.js";
+
+const invalidPatternCache = new Map();
+
+function formatPatternLabel(entry) {
+    if (!entry) return '';
+    if (typeof entry.raw === 'string' && entry.raw.trim()) {
+        return entry.raw.trim();
+    }
+    if (typeof entry.body === 'string' && entry.body.trim()) {
+        return entry.body.trim();
+    }
+    return '';
+}
+
+function notifyInvalidPatterns(invalidEntries = [], context = 'pattern') {
+    if (!invalidEntries.length) {
+        invalidPatternCache.delete(context);
+        return;
+    }
+
+    const key = invalidEntries
+        .map((entry) => formatPatternLabel(entry))
+        .filter(Boolean)
+        .sort()
+        .join('||');
+
+    if (invalidPatternCache.get(context) === key) {
+        return;
+    }
+    invalidPatternCache.set(context, key);
+
+    const previewCount = Math.min(invalidEntries.length, 3);
+    const preview = invalidEntries
+        .slice(0, previewCount)
+        .map((entry) => {
+            const label = formatPatternLabel(entry) || '(empty)';
+            return `<code>${escapeHtml(label)}</code>`;
+        })
+        .join(', ');
+    const remaining = invalidEntries.length - previewCount;
+    const plural = invalidEntries.length === 1 ? '' : 's';
+    const contextLabel = `${context}${plural}`;
+    const remainderText = remaining > 0 ? `, and ${remaining} more` : '';
+    const sampleError = invalidEntries.find((entry) => entry?.error instanceof Error)?.error?.message || '';
+    const hint = sampleError ? ` (example error: ${escapeHtml(sampleError)})` : '';
+    const message = `Skipped ${invalidEntries.length} invalid ${contextLabel}: ${preview}${remainderText}.${hint}`;
+
+    console.warn(`${logPrefix} ${message}`, invalidEntries.map((entry) => ({ label: formatPatternLabel(entry), error: entry.error })));
+    showStatus(message, 'error', 7000);
+}
 
 export function parsePatternEntry(entry) {
     if (!entry) return null;
@@ -32,29 +83,99 @@ export function parsePatternEntry(entry) {
     return null;
 }
 
-export function buildRegex(patterns, template, { flags = 'iu', extraFlags = '' } = {}) {
-    if (!Array.isArray(patterns) || patterns.length === 0) return null;
-    const pieces = patterns
+export function buildRegex(patterns, template, { flags = 'iu', extraFlags = '', context = 'character pattern' } = {}) {
+    if (!Array.isArray(patterns) || patterns.length === 0) {
+        notifyInvalidPatterns([], context);
+        return null;
+    }
+
+    const entries = patterns
         .map(entry => parsePatternEntry(entry))
-        .filter(Boolean)
-        .map(entry => entry.body)
         .filter(Boolean);
 
-    if (!pieces.length) return null;
-    const body = template.replace('{{PATTERNS}}', `(?:${pieces.join('|')})`);
-    const finalFlags = Array.from(new Set(`${flags}${extraFlags}`.split(''))).join('');
+    if (!entries.length) {
+        notifyInvalidPatterns([], context);
+        return null;
+    }
+
+    const finalFlags = Array.from(new Set(`${flags}${extraFlags}`.split('').filter(Boolean))).join('');
+    const validPieces = [];
+    const invalidEntries = [];
+    const seen = new Set();
+
+    for (const entry of entries) {
+        if (!entry.body) continue;
+        try {
+            new RegExp(entry.body, finalFlags);
+            if (!seen.has(entry.body)) {
+                validPieces.push(entry.body);
+                seen.add(entry.body);
+            }
+        } catch (error) {
+            invalidEntries.push({ ...entry, error });
+        }
+    }
+
+    notifyInvalidPatterns(invalidEntries, context);
+
+    if (!validPieces.length) {
+        if (invalidEntries.length) {
+            const error = new SyntaxError(`Unable to compile ${context} regex – all patterns were invalid.`);
+            error.invalidPatterns = invalidEntries;
+            throw error;
+        }
+        return null;
+    }
+
+    const body = template.replace('{{PATTERNS}}', `(?:${validPieces.join('|')})`);
     return new RegExp(body, finalFlags);
 }
 
-export function buildGenericRegex(patterns, { flags = 'iu' } = {}) {
-    if (!Array.isArray(patterns) || patterns.length === 0) return null;
-    const pieces = patterns
+export function buildGenericRegex(patterns, { flags = 'iu', context = 'veto pattern' } = {}) {
+    if (!Array.isArray(patterns) || patterns.length === 0) {
+        notifyInvalidPatterns([], context);
+        return null;
+    }
+
+    const entries = patterns
         .map(entry => parsePatternEntry(entry))
-        .filter(Boolean)
-        .map(entry => entry.body)
         .filter(Boolean);
-    if (!pieces.length) return null;
-    return new RegExp(pieces.join('|'), flags);
+
+    if (!entries.length) {
+        notifyInvalidPatterns([], context);
+        return null;
+    }
+
+    const finalFlags = Array.from(new Set(String(flags || '').split('').filter(Boolean))).join('');
+    const validPieces = [];
+    const invalidEntries = [];
+    const seen = new Set();
+
+    for (const entry of entries) {
+        if (!entry.body) continue;
+        try {
+            new RegExp(entry.body, finalFlags);
+            if (!seen.has(entry.body)) {
+                validPieces.push(entry.body);
+                seen.add(entry.body);
+            }
+        } catch (error) {
+            invalidEntries.push({ ...entry, error });
+        }
+    }
+
+    notifyInvalidPatterns(invalidEntries, context);
+
+    if (!validPieces.length) {
+        if (invalidEntries.length) {
+            const error = new SyntaxError(`Unable to compile ${context} regex – all patterns were invalid.`);
+            error.invalidPatterns = invalidEntries;
+            throw error;
+        }
+        return null;
+    }
+
+    return new RegExp(validPieces.join('|'), finalFlags);
 }
 
 export function ensureMap(value) {
