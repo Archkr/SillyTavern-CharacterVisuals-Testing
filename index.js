@@ -165,8 +165,8 @@ const EXTENDED_PRONOUNS = [
     'fae', 'faer', 'faers', 'faerself', 've', 'ver', 'vis', 'verself',
     'ne', 'nem', 'nir', 'nirs', 'nirself', 'per', 'pers', 'perself',
     'ya', "ya'll", 'y\'all', 'yer', 'yourselves',
-    'theyre', 'watashi', 'boku', 'ore', 'anata', 'kanojo', 'kare',
-    'it', 'its', 'someone', 'something',
+    'watashi', 'boku', 'ore', 'anata', 'kanojo', 'kare',
+    'zie', 'zir', 'it', 'its', 'someone', 'something',
 ];
 
 const COVERAGE_TOKEN_REGEX = /[\p{L}\p{M}']+/gu;
