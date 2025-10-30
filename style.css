@@ -289,11 +289,16 @@
 }
 
 #costume-switcher-settings.cs-theme .cs-outfit-card.is-collapsed .cs-outfit-card-toggle i {
-  transform: rotate(-90deg);
+    transform: rotate(-90deg);
+}
+
+#costume-switcher-settings.cs-theme .cs-outfit-card.is-collapsed .cs-outfit-card-body,
+#costume-switcher-settings.cs-theme .cs-outfit-card .cs-outfit-card-body.is-collapsed {
+    display: none;
 }
 
 #costume-switcher-settings.cs-theme .cs-outfit-card.is-collapsed {
-  gap: 12px;
+    gap: 12px;
 }
 
 #costume-switcher-settings.cs-theme .cs-outfit-card .cs-field label {
