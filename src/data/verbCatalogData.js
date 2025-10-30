@@ -1,8 +1,9 @@
-import { createRequire } from "module";
+import baseCatalog from "./verbCatalogBase.js";
 import { createConjugatedEntry } from "./verbEntryHelpers.js";
 
-const require = createRequire(import.meta.url);
-const baseCatalog = require("./verbCatalog.json");
+// NOTE: verbCatalogBase.js is generated from verbCatalog.json to keep the
+// runtime bundle compatible with browser environments that cannot access Node
+// built-ins like `module`.
 
 const ACTION_EXTENDED_ONLY = {
     attribution: {
