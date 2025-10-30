@@ -36,19 +36,6 @@ Under the hood the extension listens to streaming output from your model, scores
 
 ---
 
-## Working in Tandem with Character Expressions
-
-Costume Switcher and Character Expressions draw costumes and facial sprites from the same SillyTavern character folders. When you install both extensions you can:
-
-- **Share sprite packs:** ZIP imports that you already curated for Character Expressions drop into the same `/data/<user-handle>/characters/(character_name)/` folders that Costume Switcher reads, so matching costumes and expressions stay paired without extra setup.
-- **Reuse overrides and slash commands:** The `/costume` override, folder suffixes such as `\tracksuit`, and default/fallback expression logic from Character Expressions all continue to work—Costume Switcher simply points the active art set at a different wardrobe folder when the scene changes.
-- **Mix automation sources:** Run Character Expressions in Local, Main API, WebLLM, or Extras classification modes while Costume Switcher tracks the speaker. The moment the classifier swaps to a new emotion, the wardrobe update follows the same name and folder conventions.
-- **Scale with custom expressions:** Any custom labels you define on the Character Expressions side still benefit from Costume Switcher’s detection. Even if a sentiment model only understands the default expression set, the wardrobe can change whenever the speaker changes.
-
-Together these behaviours let you keep expressions, sprites, and outfits synchronised, whether you are streaming live RP, playing VN-style scenarios, or juggling multiple characters in a single chat log.
-
----
-
 ## Requirements
 
 - **SillyTavern** v1.10.9 or newer (release or staging). Earlier builds may lack UI hooks required by the extension.
