@@ -65,23 +65,23 @@
               </header>
               <div class="cs-card-body">
                 <div class="cs-toolbar">
-                  <select id="cs-profile-select" class="text_pole" title="Select a saved profile to load it."></select>
-                  <button id="cs-profile-save" class="menu_button interactable cs-button-primary" title="Save changes to the active profile.">Save</button>
+                  <select id="cs-profile-select" class="text_pole" title="Select a saved profile to load it." data-change-notice="Switching profiles auto-saves any pending edits."></select>
+                  <button id="cs-profile-save" class="menu_button interactable cs-button-primary" title="Save changes to the active profile." data-change-notice="Saves your current tweaks immediately.">Save</button>
                 </div>
                 <div class="cs-toolbar">
                   <input id="cs-profile-name" class="text_pole" type="text" placeholder="Enter a name…" title="Enter a name to rename the active profile or create a new one." />
-                  <button id="cs-profile-saveas" class="menu_button interactable" title="Save the active profile's settings under a new name.">Save As</button>
-                  <button id="cs-profile-rename" class="menu_button interactable" title="Rename the active profile to the entered name.">Rename</button>
+                  <button id="cs-profile-saveas" class="menu_button interactable" title="Save the active profile's settings under a new name." data-change-notice="Creates a new profile with your current auto-saved settings.">Save As</button>
+                  <button id="cs-profile-rename" class="menu_button interactable" title="Rename the active profile to the entered name." data-change-notice="Renaming applies instantly to the active profile.">Rename</button>
                 </div>
                 <p class="cs-helper-text">Use the name field above to create or rename profiles. Leave it blank when simply saving edits to the current profile.</p>
                 <div class="cs-toolbar cs-toolbar--wrap">
-                  <button id="cs-profile-new" class="menu_button interactable" title="Create a fresh profile using default settings.">New (Defaults)</button>
-                  <button id="cs-profile-duplicate" class="menu_button interactable" title="Duplicate the active profile to a new name.">Duplicate Current</button>
-                  <button id="cs-profile-delete" class="menu_button interactable cs-button-danger" title="Delete the active profile.">Delete</button>
+                  <button id="cs-profile-new" class="menu_button interactable" title="Create a fresh profile using default settings." data-change-notice="Creates a fresh profile right away.">New (Defaults)</button>
+                  <button id="cs-profile-duplicate" class="menu_button interactable" title="Duplicate the active profile to a new name." data-change-notice="Duplicates the current profile immediately.">Duplicate Current</button>
+                  <button id="cs-profile-delete" class="menu_button interactable cs-button-danger" title="Delete the active profile." data-change-notice="Deletes the profile immediately after confirmation.">Delete</button>
                 </div>
                 <div class="cs-toolbar cs-toolbar--wrap">
-                  <button id="cs-profile-import" class="menu_button interactable" title="Import a profile from a .json file.">Import Profile</button>
-                  <button id="cs-profile-export" class="menu_button interactable" title="Export the current profile to a .json file.">Export Profile</button>
+                  <button id="cs-profile-import" class="menu_button interactable" title="Import a profile from a .json file." data-change-notice="Importing will auto-save the new profile.">Import Profile</button>
+                  <button id="cs-profile-export" class="menu_button interactable" title="Export the current profile to a .json file." data-change-notice="Exports the latest auto-saved data.">Export Profile</button>
                   <input type="file" id="cs-profile-file-input" accept=".json" hidden />
                 </div>
               </div>
@@ -101,7 +101,7 @@
               <div class="cs-card-body cs-card-body--stacked">
                 <div class="cs-toolbar">
                   <select id="cs-preset-select" class="text_pole" style="flex: 1 1 auto;" title="Pick a preset to review its settings before applying."></select>
-                  <button id="cs-preset-load" class="menu_button interactable cs-button-primary" title="Apply the selected preset to this profile.">Apply Preset</button>
+                  <button id="cs-preset-load" class="menu_button interactable cs-button-primary" title="Apply the selected preset to this profile." data-change-notice="Applying a preset saves your profile immediately.">Apply Preset</button>
                 </div>
                 <p id="cs-preset-description" class="cs-helper-text">Load a recommended configuration into the current profile.</p>
               </div>
@@ -129,7 +129,7 @@
                   <small>Force the switcher to stay on a specific character until you unlock it.</small>
                   <div class="cs-toolbar">
                     <select id="cs-focus-lock-select" class="text_pole" style="flex: 1 1 auto;" title="Select a character from your patterns to lock onto."></select>
-                    <button id="cs-focus-lock-toggle" class="menu_button interactable" title="Lock or unlock the focus on the selected character.">Lock</button>
+                    <button id="cs-focus-lock-toggle" class="menu_button interactable" title="Lock or unlock the focus on the selected character." data-change-notice="Focus lock changes save right away.">Lock</button>
                   </div>
                 </div>
                 <div class="cs-field">
@@ -186,7 +186,7 @@
                   </thead>
                   <tbody id="cs-mappings-tbody"></tbody>
                 </table>
-                <button id="cs-mapping-add" class="menu_button interactable" style="margin-top: 12px;">Add Mapping</button>
+                <button id="cs-mapping-add" class="menu_button interactable" style="margin-top: 12px;" data-change-notice="Adding a row will be saved once details are filled in.">Add Mapping</button>
               </div>
             </section>
           </div>
@@ -238,7 +238,7 @@
                     Add characters to prototype nested outfit mappings. Variations can include triggers (one per line, supports <code>/regex/</code>), match-type filters, and scene awareness requirements before falling back to the default folder.
                   </p>
                   <div id="cs-outfit-character-list" class="cs-outfit-character-list" data-empty-text="No characters have outfit variations yet."></div>
-                  <button id="cs-outfit-add-character" class="menu_button interactable cs-outfit-add-button" type="button">
+                  <button id="cs-outfit-add-character" class="menu_button interactable cs-outfit-add-button" type="button" data-change-notice="Adds a new character slot and auto-saves your mappings.">
                     <i class="fa-solid fa-user-plus"></i>
                     <span>Add Character Slot</span>
                   </button>
@@ -429,14 +429,14 @@
                     <select id="cs-score-preset-select" class="text_pole" style="flex: 1 1 auto;" title="Select a saved scoring preset to preview its weights.">
                       <option value="">Select a scoring preset…</option>
                     </select>
-                    <button id="cs-score-preset-apply" class="menu_button interactable cs-button-primary" title="Apply the selected scoring preset to this profile.">Apply</button>
+                    <button id="cs-score-preset-apply" class="menu_button interactable cs-button-primary" title="Apply the selected scoring preset to this profile." data-change-notice="Applying a scoring preset saves instantly.">Apply</button>
                   </div>
                   <div class="cs-toolbar cs-toolbar--wrap">
                     <input id="cs-score-preset-name" class="text_pole" type="text" placeholder="Enter a name…" title="Enter a name to save or rename a scoring preset." />
-                    <button id="cs-score-preset-save" class="menu_button interactable" title="Overwrite the selected preset with the current weights.">Save</button>
-                    <button id="cs-score-preset-saveas" class="menu_button interactable" title="Save the current weights as a new preset.">Save As</button>
-                    <button id="cs-score-preset-rename" class="menu_button interactable" title="Rename the selected custom preset.">Rename</button>
-                    <button id="cs-score-preset-delete" class="menu_button interactable cs-button-danger" title="Delete the selected custom preset.">Delete</button>
+                    <button id="cs-score-preset-save" class="menu_button interactable" title="Overwrite the selected preset with the current weights." data-change-notice="Saving overwrites the preset immediately.">Save</button>
+                    <button id="cs-score-preset-saveas" class="menu_button interactable" title="Save the current weights as a new preset." data-change-notice="Creates a new scoring preset instantly.">Save As</button>
+                    <button id="cs-score-preset-rename" class="menu_button interactable" title="Rename the selected custom preset." data-change-notice="Renaming presets happens instantly.">Rename</button>
+                    <button id="cs-score-preset-delete" class="menu_button interactable cs-button-danger" title="Delete the selected custom preset." data-change-notice="Deleting presets takes effect immediately.">Delete</button>
                   </div>
                   <p id="cs-score-preset-message" class="cs-helper-text">Select a preset to preview how it stacks against your active profile.</p>
                   <div id="cs-score-preset-preview" class="cs-score-preview">
@@ -590,8 +590,8 @@
 
       <div class="cs-footer">
         <div class="cs-toolbar cs-toolbar--wrap">
-          <button id="cs-save" class="menu_button interactable cs-button-primary">Save Current Profile</button>
-          <button id="cs-reset" class="menu_button interactable" title="Switch back to your default costume, or the main avatar if none is set.">Manual Reset</button>
+          <button id="cs-save" class="menu_button interactable cs-button-primary" data-change-notice="Manual save snapshots the latest auto-saved settings.">Save Current Profile</button>
+          <button id="cs-reset" class="menu_button interactable" title="Switch back to your default costume, or the main avatar if none is set." data-change-notice="Resets your costume immediately.">Manual Reset</button>
         </div>
         <div id="cs-status" class="cs-status-message" aria-live="polite">
           <i class="fa-solid fa-circle-info"></i>
