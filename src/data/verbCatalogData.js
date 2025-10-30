@@ -73,6 +73,10 @@ const curatedPhrasalVerbs = [
         lemma: "fall",
         particle: "apart",
         categories: ACTION_EXTENDED_ONLY,
+        overrides: {
+            past: "fell",
+            pastParticiple: "fallen",
+        },
     }),
     createConjugatedEntry({
         lemma: "lie",
@@ -89,18 +93,34 @@ const curatedIrregularVerbs = [
     createConjugatedEntry({
         lemma: "arise",
         categories: ACTION_EXTENDED_ONLY,
+        overrides: {
+            past: "arose",
+            pastParticiple: "arisen",
+        },
     }),
     createConjugatedEntry({
         lemma: "befall",
         categories: ACTION_EXTENDED_ONLY,
+        overrides: {
+            past: "befell",
+            pastParticiple: "befallen",
+        },
     }),
     createConjugatedEntry({
         lemma: "overcome",
         categories: ACTION_EXTENDED_ONLY,
+        overrides: {
+            past: "overcame",
+            pastParticiple: "overcome",
+        },
     }),
     createConjugatedEntry({
         lemma: "withstand",
         categories: ACTION_EXTENDED_ONLY,
+        overrides: {
+            past: "withstood",
+            pastParticiple: "withstood",
+        },
     }),
 ];
 
