@@ -313,7 +313,27 @@ const state = {
     messageKeyQueue: [],
     activeScorePresetKey: null,
     coverageDiagnostics: null,
+    outfitCardCollapse: new Map(),
 };
+
+let nextOutfitCardId = 1;
+
+function ensureMappingCardId(mapping) {
+    if (!mapping || typeof mapping !== "object") {
+        return null;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(mapping, "__cardId")) {
+        const id = `cs-outfit-card-${Date.now()}-${nextOutfitCardId++}`;
+        Object.defineProperty(mapping, "__cardId", {
+            value: id,
+            enumerable: false,
+            configurable: true,
+        });
+    }
+
+    return mapping.__cardId;
+}
 
 const TAB_STORAGE_KEY = `${extensionName}-active-tab`;
 
@@ -2654,7 +2674,14 @@ function createOutfitVariantElement(profile, mapping, mappingIdx, variant, varia
 }
 
 function createOutfitCard(profile, mapping, idx) {
-    const card = $('<article>').addClass('cs-outfit-card').attr('data-idx', idx);
+    let cardId = ensureMappingCardId(mapping);
+    if (!cardId) {
+        cardId = `cs-outfit-card-${Date.now()}-${nextOutfitCardId++}`;
+    }
+
+    const card = $('<article>').addClass('cs-outfit-card')
+        .attr('data-idx', idx)
+        .attr('data-card-id', cardId);
     const header = $('<div>').addClass('cs-outfit-card-header');
     const title = $('<div>').addClass('cs-outfit-card-title');
     title.append($('<i>').addClass('fa-solid fa-user-astronaut'));
@@ -2672,18 +2699,34 @@ function createOutfitCard(profile, mapping, idx) {
     title.append(nameField);
     header.append(title);
 
+    const controls = $('<div>').addClass('cs-outfit-card-controls');
+
+    const bodyId = `${cardId}-body`;
+    const toggleLabel = $('<span>').text('Collapse');
+    const toggleButton = $('<button>', {
+        type: 'button',
+        class: 'menu_button interactable cs-outfit-card-toggle',
+        'aria-expanded': 'true',
+        'aria-controls': bodyId,
+    }).append($('<i>').addClass('fa-solid fa-chevron-down'), toggleLabel);
+    controls.append(toggleButton);
+
     const removeButton = $('<button>', {
         type: 'button',
         class: 'menu_button interactable cs-button-danger cs-outfit-remove-character',
     }).append($('<i>').addClass('fa-solid fa-trash-can'), $('<span>').text('Remove Character'))
         .on('click', () => {
             if (!profile?.mappings) return;
+            state.outfitCardCollapse?.delete(cardId);
             profile.mappings.splice(idx, 1);
             renderMappings(profile);
             rebuildMappingLookup(profile);
         });
-    header.append(removeButton);
+    controls.append(removeButton);
+    header.append(controls);
     card.append(header);
+
+    const body = $('<div>', { id: bodyId }).addClass('cs-outfit-card-body');
 
     const defaultId = `cs-outfit-default-${idx}`;
     const defaultField = $('<div>').addClass('cs-field')
@@ -2713,7 +2756,7 @@ function createOutfitCard(profile, mapping, idx) {
     defaultRow.append(defaultInput, defaultButton, defaultPicker);
     defaultField.append(defaultRow);
     defaultField.append($('<small>').text('Fallback folder when no variation triggers.'));
-    card.append(defaultField);
+    body.append(defaultField);
 
     const variantsContainer = $('<div>').addClass('cs-outfit-variants');
     if (!Array.isArray(mapping.outfits) || !mapping.outfits.length) {
@@ -2724,7 +2767,7 @@ function createOutfitCard(profile, mapping, idx) {
             variantsContainer.append(createOutfitVariantElement(profile, mapping, idx, variant, variantIndex));
         });
     }
-    card.append(variantsContainer);
+    body.append(variantsContainer);
 
     const addVariantButton = $('<button>', {
         type: 'button',
@@ -2741,9 +2784,40 @@ function createOutfitCard(profile, mapping, idx) {
             const variantEl = createOutfitVariantElement(profile, mapping, idx, newVariant, variantIndex);
             variantsContainer.append(variantEl);
             syncMappingRowOutfits(idx, mapping.outfits);
+            setCollapsed(false);
             variantEl.find('.cs-outfit-variant-folder').trigger('focus');
         });
-    card.append(addVariantButton);
+    body.append(addVariantButton);
+
+    card.append(body);
+
+    const setCollapsed = (collapsed) => {
+        if (collapsed) {
+            card.addClass('is-collapsed');
+            body.attr('hidden', 'hidden');
+            toggleButton.attr('aria-expanded', 'false');
+            toggleButton.attr('title', 'Expand character slot');
+            toggleButton.attr('aria-label', 'Expand character slot');
+            toggleLabel.text('Expand');
+            if (state.outfitCardCollapse instanceof Map) {
+                state.outfitCardCollapse.set(cardId, true);
+            }
+        } else {
+            card.removeClass('is-collapsed');
+            body.removeAttr('hidden');
+            toggleButton.attr('aria-expanded', 'true');
+            toggleButton.attr('title', 'Collapse character slot');
+            toggleButton.attr('aria-label', 'Collapse character slot');
+            toggleLabel.text('Collapse');
+            if (state.outfitCardCollapse instanceof Map) {
+                state.outfitCardCollapse.delete(cardId);
+            }
+        }
+    };
+
+    toggleButton.on('click', () => {
+        setCollapsed(!card.hasClass('is-collapsed'));
+    });
 
     nameInput.on('input', () => {
         mapping.name = nameInput.val().trim();
@@ -2763,6 +2837,8 @@ function createOutfitCard(profile, mapping, idx) {
         rebuildMappingLookup(profile);
     });
 
+    const collapsed = state.outfitCardCollapse instanceof Map && state.outfitCardCollapse.get(cardId) === true;
+    setCollapsed(collapsed);
     syncMappingRowOutfits(idx, mapping.outfits);
 
     return card;
@@ -2782,6 +2858,13 @@ function renderOutfitLab(profile) {
     } else {
         mappings.forEach((entry, idx) => {
             const normalized = normalizeMappingEntry(entry);
+            if (entry && typeof entry === 'object' && Object.prototype.hasOwnProperty.call(entry, '__cardId') && !Object.prototype.hasOwnProperty.call(normalized, '__cardId')) {
+                Object.defineProperty(normalized, '__cardId', {
+                    value: entry.__cardId,
+                    enumerable: false,
+                    configurable: true,
+                });
+            }
             profile.mappings[idx] = normalized;
             container.append(createOutfitCard(profile, normalized, idx));
         });
@@ -4215,6 +4298,10 @@ function wireUI() {
         const idx = parseInt($(this).closest('tr').attr('data-idx'), 10);
         const profile = getActiveProfile();
         if (profile && !isNaN(idx)) {
+            const mapping = profile.mappings?.[idx];
+            if (mapping && Object.prototype.hasOwnProperty.call(mapping, '__cardId')) {
+                state.outfitCardCollapse?.delete(mapping.__cardId);
+            }
             profile.mappings.splice(idx, 1);
             renderMappings(profile); // Re-render to update indices
             rebuildMappingLookup(profile);
