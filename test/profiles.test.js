@@ -65,3 +65,20 @@ test('loadProfiles preserves enableOutfits flag and outfit arrays', () => {
     assert.deepEqual(rehydrated.mappings, loaded.Modern.mappings, 'modern mapping should round-trip through serialization');
     assert.equal(rehydrated.enableOutfits, true, 'modern profile should preserve enableOutfits flag');
 });
+
+test('normalizeProfile preserves non-enumerable mapping identifiers', () => {
+    const mapping = { name: 'Clara', defaultFolder: 'clara/base' };
+    Object.defineProperty(mapping, '__cardId', {
+        value: 'card-123',
+        enumerable: false,
+        configurable: true,
+    });
+
+    const profile = { mappings: [mapping] };
+    const normalized = normalizeProfile(profile, PROFILE_DEFAULTS);
+
+    assert.equal(normalized.mappings.length, 1, 'normalized profile should keep mapping entries');
+    const descriptor = Object.getOwnPropertyDescriptor(normalized.mappings[0], '__cardId');
+    assert.equal(normalized.mappings[0].__cardId, 'card-123', 'card identifier should persist through normalization');
+    assert.ok(descriptor && descriptor.enumerable === false, 'card identifier should remain non-enumerable');
+});

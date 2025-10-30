@@ -148,6 +148,48 @@ const SCORE_WEIGHT_LABELS = {
     distancePenaltyWeight: 'Distance Penalty',
 };
 
+const AUTO_SAVE_DEBOUNCE_MS = 800;
+const AUTO_SAVE_NOTICE_COOLDOWN_MS = 1800;
+const AUTO_SAVE_RECOMPILE_KEYS = new Set([
+    'patterns',
+    'ignorePatterns',
+    'vetoPatterns',
+    'attributionVerbs',
+    'actionVerbs',
+    'pronounVocabulary',
+]);
+const AUTO_SAVE_FOCUS_LOCK_KEYS = new Set(['patterns']);
+const AUTO_SAVE_REASON_OVERRIDES = {
+    patterns: 'character patterns',
+    ignorePatterns: 'ignored names',
+    vetoPatterns: 'veto phrases',
+    defaultCostume: 'default costume',
+    debug: 'debug logging',
+    globalCooldownMs: 'global cooldown',
+    repeatSuppressMs: 'repeat suppression window',
+    perTriggerCooldownMs: 'per-trigger cooldown',
+    failedTriggerCooldownMs: 'failed trigger cooldown',
+    maxBufferChars: 'buffer size',
+    tokenProcessThreshold: 'token processing threshold',
+    detectionBias: 'detection bias',
+    detectAttribution: 'attribution detection',
+    detectAction: 'action detection',
+    detectVocative: 'vocative detection',
+    detectPossessive: 'possessive detection',
+    detectPronoun: 'pronoun detection',
+    detectGeneral: 'general name detection',
+    enableOutfits: 'outfit automation',
+    attributionVerbs: 'attribution verbs',
+    actionVerbs: 'action verbs',
+    pronounVocabulary: 'pronoun vocabulary',
+    enableSceneRoster: 'scene roster',
+    sceneRosterTTL: 'scene roster timing',
+    rosterBonus: 'roster bonus',
+    rosterPriorityDropoff: 'roster drop-off',
+    distancePenaltyWeight: 'distance penalty weight',
+    mappings: 'character mappings',
+};
+
 const DEFAULT_SCORE_PRESETS = {
     'Balanced Baseline': {
         description: 'Matches the default scoring behaviour with a steady roster bonus.',
@@ -337,6 +379,14 @@ const state = {
     activeScorePresetKey: null,
     coverageDiagnostics: null,
     outfitCardCollapse: new Map(),
+    autoSave: {
+        timer: null,
+        pendingReasons: new Set(),
+        requiresRecompile: false,
+        requiresMappingRebuild: false,
+        requiresFocusLockRefresh: false,
+        lastNoticeAt: new Map(),
+    },
 };
 
 let nextOutfitCardId = 1;
@@ -2098,6 +2148,196 @@ function cloneOutfitList(outfits) {
     return cloned;
 }
 
+function ensureAutoSaveState() {
+    if (!state.autoSave) {
+        state.autoSave = {
+            timer: null,
+            pendingReasons: new Set(),
+            requiresRecompile: false,
+            requiresMappingRebuild: false,
+            requiresFocusLockRefresh: false,
+            lastNoticeAt: new Map(),
+        };
+    }
+    return state.autoSave;
+}
+
+function resetAutoSaveState() {
+    const auto = ensureAutoSaveState();
+    if (auto.timer) {
+        clearTimeout(auto.timer);
+        auto.timer = null;
+    }
+    auto.pendingReasons.clear();
+    auto.requiresRecompile = false;
+    auto.requiresMappingRebuild = false;
+    auto.requiresFocusLockRefresh = false;
+}
+
+function syncMappingRowsWithProfile(profile) {
+    const rows = $("#cs-mappings-tbody tr");
+    if (!rows.length) {
+        return;
+    }
+    rows.each(function(index) {
+        const mapping = Array.isArray(profile?.mappings) ? profile.mappings[index] : null;
+        if (!mapping) {
+            $(this).data('outfits', []);
+            return;
+        }
+        const outfits = cloneOutfitList(mapping.outfits);
+        $(this).data('outfits', outfits);
+    });
+}
+
+function formatAutoSaveReason(key) {
+    if (!key) {
+        return 'changes';
+    }
+    if (AUTO_SAVE_REASON_OVERRIDES[key]) {
+        return AUTO_SAVE_REASON_OVERRIDES[key];
+    }
+    if (key.startsWith('priority')) {
+        return 'scoring weights';
+    }
+    if (key.includes('roster')) {
+        return 'roster tuning';
+    }
+    if (key.includes('weight')) {
+        return 'scoring weights';
+    }
+    return key.replace(/([A-Z])/g, ' $1').trim().toLowerCase();
+}
+
+function summarizeAutoSaveReasons(reasonSet) {
+    const list = Array.from(reasonSet || []).filter(Boolean);
+    if (!list.length) {
+        return 'changes';
+    }
+    if (list.length === 1) {
+        return list[0];
+    }
+    const head = list.slice(0, -1).join(', ');
+    const tail = list[list.length - 1];
+    return head ? `${head} and ${tail}` : tail;
+}
+
+function announceAutoSaveIntent(target, reason, message, key) {
+    const auto = ensureAutoSaveState();
+    const noticeKey = key
+        || target?.dataset?.changeNoticeKey
+        || target?.id
+        || target?.name
+        || (reason ? reason.replace(/\s+/g, '-') : 'auto-save');
+    const now = Date.now();
+    const last = auto.lastNoticeAt.get(noticeKey);
+    if (last && now - last < AUTO_SAVE_NOTICE_COOLDOWN_MS) {
+        return;
+    }
+    auto.lastNoticeAt.set(noticeKey, now);
+    const noticeMessage = message
+        || target?.dataset?.changeNotice
+        || (reason ? `Auto-saving ${reason}…` : 'Auto-saving changes…');
+    showStatus(noticeMessage, 'info', 2000);
+}
+
+function scheduleProfileAutoSave(options = {}) {
+    const auto = ensureAutoSaveState();
+    const reasonText = options.reason || formatAutoSaveReason(options.key);
+    if (reasonText) {
+        auto.pendingReasons.add(reasonText);
+    }
+    if (options.requiresRecompile) {
+        auto.requiresRecompile = true;
+    }
+    if (options.requiresMappingRebuild) {
+        auto.requiresMappingRebuild = true;
+    }
+    if (options.requiresFocusLockRefresh) {
+        auto.requiresFocusLockRefresh = true;
+    }
+    if (options.element || options.noticeMessage || reasonText) {
+        announceAutoSaveIntent(options.element, reasonText, options.noticeMessage, options.noticeKey || options.key);
+    }
+    if (auto.timer) {
+        clearTimeout(auto.timer);
+    }
+    auto.timer = setTimeout(() => {
+        flushScheduledProfileAutoSave({});
+    }, AUTO_SAVE_DEBOUNCE_MS);
+}
+
+function flushScheduledProfileAutoSave({ overrideMessage, showStatusMessage = true, force = false } = {}) {
+    const auto = ensureAutoSaveState();
+    const hasPending = auto.pendingReasons.size > 0
+        || auto.requiresRecompile
+        || auto.requiresMappingRebuild
+        || auto.requiresFocusLockRefresh;
+    if (!hasPending && !force) {
+        return false;
+    }
+    const summary = summarizeAutoSaveReasons(auto.pendingReasons);
+    const message = overrideMessage !== undefined
+        ? overrideMessage
+        : (hasPending ? `Auto-saved ${summary}.` : null);
+    return commitProfileChanges({
+        message,
+        showStatusMessage: showStatusMessage && Boolean(message),
+        recompile: auto.requiresRecompile,
+        rebuildMappings: auto.requiresMappingRebuild && !auto.requiresRecompile,
+        refreshFocusLock: auto.requiresFocusLockRefresh,
+    });
+}
+
+function commitProfileChanges({
+    message,
+    messageType = 'success',
+    recompile = false,
+    rebuildMappings = false,
+    refreshFocusLock = false,
+    showStatusMessage = true,
+} = {}) {
+    const profile = getActiveProfile();
+    if (!profile) {
+        resetAutoSaveState();
+        return false;
+    }
+    const normalized = normalizeProfile(saveCurrentProfileData(), PROFILE_DEFAULTS);
+    const mappings = Array.isArray(normalized.mappings) ? normalized.mappings : [];
+    mappings.forEach(ensureMappingCardId);
+    Object.assign(profile, normalized);
+    profile.mappings = mappings;
+    syncMappingRowsWithProfile(profile);
+    if (recompile) {
+        recompileRegexes();
+        refreshCoverageFromLastReport();
+    } else if (rebuildMappings) {
+        rebuildMappingLookup(profile);
+    }
+    if (refreshFocusLock) {
+        updateFocusLockUI();
+    }
+    resetAutoSaveState();
+    if (showStatusMessage && message) {
+        persistSettings(message, messageType);
+    } else {
+        saveSettingsDebounced();
+    }
+    return true;
+}
+
+function handleAutoSaveFieldEvent(event, key) {
+    if (!event || !key) {
+        return;
+    }
+    scheduleProfileAutoSave({
+        key,
+        element: event.currentTarget,
+        requiresRecompile: AUTO_SAVE_RECOMPILE_KEYS.has(key),
+        requiresFocusLockRefresh: AUTO_SAVE_FOCUS_LOCK_KEYS.has(key),
+    });
+}
+
 function gatherVariantStringList(value) {
     const results = [];
     const visit = (entry) => {
@@ -2351,12 +2591,23 @@ function createOutfitVariantElement(profile, mapping, mappingIdx, variant, varia
         .attr('data-variant-index', variantIndex)
         .data('variant', normalized);
 
+    const markVariantDirty = (element) => {
+        scheduleProfileAutoSave({
+            reason: 'character mappings',
+            element,
+            requiresMappingRebuild: true,
+        });
+    };
+
     const header = $('<div>').addClass('cs-outfit-variant-header');
     header.append($('<h4>').text(`Variation ${variantIndex + 1}`));
     const removeButton = $('<button>', {
         type: 'button',
         class: 'menu_button interactable cs-outfit-variant-remove cs-button-danger',
-    }).append($('<i>').addClass('fa-solid fa-trash-can'), $('<span>').text('Remove'));
+    })
+        .attr('data-change-notice', 'Removing this variation auto-saves your mappings.')
+        .attr('data-change-notice-key', `variant-remove-${mappingIdx}`)
+        .append($('<i>').addClass('fa-solid fa-trash-can'), $('<span>').text('Remove'));
     header.append(removeButton);
     variantEl.append(header);
 
@@ -2440,6 +2691,7 @@ function createOutfitVariantElement(profile, mapping, mappingIdx, variant, varia
                 delete normalized.matchKinds;
             }
             syncMappingRowOutfits(mappingIdx, mapping.outfits);
+            markVariantDirty(checkbox[0]);
         });
     });
     matchKindField.append(matchKindList);
@@ -2518,9 +2770,14 @@ function createOutfitVariantElement(profile, mapping, mappingIdx, variant, varia
         syncMappingRowOutfits(mappingIdx, mapping.outfits);
     };
 
-    requiresTextarea.on('input', updateAwarenessState);
-    anyTextarea.on('input', updateAwarenessState);
-    excludesTextarea.on('input', updateAwarenessState);
+    const handleAwarenessInput = function() {
+        updateAwarenessState();
+        markVariantDirty(this);
+    };
+
+    requiresTextarea.on('input', handleAwarenessInput);
+    anyTextarea.on('input', handleAwarenessInput);
+    excludesTextarea.on('input', handleAwarenessInput);
 
     labelInput.on('input', () => {
         const value = labelInput.val().trim();
@@ -2530,11 +2787,13 @@ function createOutfitVariantElement(profile, mapping, mappingIdx, variant, varia
             delete normalized.label;
         }
         syncMappingRowOutfits(mappingIdx, mapping.outfits);
+        markVariantDirty(labelInput[0]);
     });
 
     folderInput.on('input', () => {
         normalized.folder = folderInput.val().trim();
         syncMappingRowOutfits(mappingIdx, mapping.outfits);
+        markVariantDirty(folderInput[0]);
     });
 
     triggerTextarea.on('input', () => {
@@ -2544,9 +2803,11 @@ function createOutfitVariantElement(profile, mapping, mappingIdx, variant, varia
             .filter(Boolean);
         normalized.triggers = triggers;
         syncMappingRowOutfits(mappingIdx, mapping.outfits);
+        markVariantDirty(triggerTextarea[0]);
     });
 
     removeButton.on('click', () => {
+        announceAutoSaveIntent(removeButton[0], 'character mappings', removeButton[0].dataset.changeNotice, removeButton[0].dataset.changeNoticeKey);
         const activeProfile = profile || getActiveProfile();
         if (!activeProfile?.mappings?.[mappingIdx]) {
             return;
@@ -2563,6 +2824,7 @@ function createOutfitVariantElement(profile, mapping, mappingIdx, variant, varia
         if (!variantContainer.find('.cs-outfit-variant').length) {
             variantContainer.append($('<div>').addClass('cs-outfit-empty-variants').text('No variations yet. Add one to test trigger-based outfits.'));
         }
+        markVariantDirty(removeButton[0]);
     });
 
     return variantEl;
@@ -2609,13 +2871,22 @@ function createOutfitCard(profile, mapping, idx) {
     const removeButton = $('<button>', {
         type: 'button',
         class: 'menu_button interactable cs-button-danger cs-outfit-remove-character',
-    }).append($('<i>').addClass('fa-solid fa-trash-can'), $('<span>').text('Remove Character'))
+    })
+        .attr('data-change-notice', 'Removing this character saves your mappings immediately.')
+        .attr('data-change-notice-key', `${cardId}-remove`)
+        .append($('<i>').addClass('fa-solid fa-trash-can'), $('<span>').text('Remove Character'))
         .on('click', () => {
+            announceAutoSaveIntent(removeButton[0], 'character mappings', removeButton[0].dataset.changeNotice, removeButton[0].dataset.changeNoticeKey);
             if (!profile?.mappings) return;
             state.outfitCardCollapse?.delete(cardId);
             profile.mappings.splice(idx, 1);
             renderMappings(profile);
             rebuildMappingLookup(profile);
+            scheduleProfileAutoSave({
+                reason: 'character mappings',
+                element: removeButton[0],
+                requiresMappingRebuild: true,
+            });
         });
     controls.append(removeButton);
     header.append(controls);
@@ -2667,8 +2938,12 @@ function createOutfitCard(profile, mapping, idx) {
     const addVariantButton = $('<button>', {
         type: 'button',
         class: 'menu_button interactable cs-outfit-add-variant',
-    }).append($('<i>').addClass('fa-solid fa-plus'), $('<span>').text('Add Outfit Variation'))
+    })
+        .attr('data-change-notice', 'Adding a variation auto-saves this character slot.')
+        .attr('data-change-notice-key', `${cardId}-add-variant`)
+        .append($('<i>').addClass('fa-solid fa-plus'), $('<span>').text('Add Outfit Variation'))
         .on('click', () => {
+            announceAutoSaveIntent(addVariantButton[0], 'character mappings', addVariantButton[0].dataset.changeNotice, addVariantButton[0].dataset.changeNoticeKey);
             if (!Array.isArray(mapping.outfits)) {
                 mapping.outfits = [];
             }
@@ -2681,6 +2956,11 @@ function createOutfitCard(profile, mapping, idx) {
             syncMappingRowOutfits(idx, mapping.outfits);
             setCollapsed(false);
             variantEl.find('.cs-outfit-variant-folder').trigger('focus');
+            scheduleProfileAutoSave({
+                reason: 'character mappings',
+                element: addVariantButton[0],
+                requiresMappingRebuild: true,
+            });
         });
     body.append(addVariantButton);
 
@@ -2726,9 +3006,19 @@ function createOutfitCard(profile, mapping, idx) {
     nameInput.on('input', () => {
         mapping.name = nameInput.val().trim();
         syncMappingRowName(idx, nameInput.val());
+        scheduleProfileAutoSave({
+            reason: 'character mappings',
+            element: nameInput[0],
+            requiresMappingRebuild: true,
+        });
     });
     nameInput.on('change', () => {
         rebuildMappingLookup(profile);
+        scheduleProfileAutoSave({
+            reason: 'character mappings',
+            element: nameInput[0],
+            requiresMappingRebuild: true,
+        });
     });
 
     defaultInput.on('input', () => {
@@ -2736,9 +3026,19 @@ function createOutfitCard(profile, mapping, idx) {
         mapping.defaultFolder = value;
         mapping.folder = value;
         syncMappingRowFolder(idx, defaultInput.val());
+        scheduleProfileAutoSave({
+            reason: 'character mappings',
+            element: defaultInput[0],
+            requiresMappingRebuild: true,
+        });
     });
     defaultInput.on('change', () => {
         rebuildMappingLookup(profile);
+        scheduleProfileAutoSave({
+            reason: 'character mappings',
+            element: defaultInput[0],
+            requiresMappingRebuild: true,
+        });
     });
 
     const collapseStore = ensureCollapseStore();
@@ -3876,28 +4176,65 @@ function testRegexPattern() {
 function wireUI() {
     const settings = getSettings();
     initTabNavigation();
-    $(document).on('change', '#cs-enable', function() { settings.enabled = $(this).prop("checked"); persistSettings("Extension " + (settings.enabled ? "Enabled" : "Disabled"), 'info'); });
-    $(document).on('click', '#cs-save', () => { 
-        const profile = getActiveProfile();
-        if(profile) {
-            Object.assign(profile, saveCurrentProfileData());
-            recompileRegexes(); 
-            updateFocusLockUI();
-            persistSettings("Profile Saved");
+    Object.entries(uiMapping).forEach(([key, mapping]) => {
+        const selector = mapping?.selector;
+        if (!selector) {
+            return;
+        }
+        $(document).on('change', selector, (event) => handleAutoSaveFieldEvent(event, key));
+        if (['text', 'textarea', 'csvTextarea', 'number', 'range'].includes(mapping.type)) {
+            $(document).on('input', selector, (event) => handleAutoSaveFieldEvent(event, key));
         }
     });
-    $(document).on('change', '#cs-profile-select', function() { loadProfile($(this).val()); });
+    $(document).on('focusin mouseenter', '[data-change-notice]', function() {
+        if (this?.disabled) {
+            return;
+        }
+        announceAutoSaveIntent(this, null, this.dataset.changeNotice, this.dataset.changeNoticeKey);
+    });
+
+    $(document).on('change', '#cs-enable', function() {
+        const enabled = $(this).prop('checked');
+        announceAutoSaveIntent(this, null, `Extension will ${enabled ? 'enable' : 'disable'} immediately.`, 'cs-enable');
+        settings.enabled = enabled;
+        persistSettings('Extension ' + (enabled ? 'Enabled' : 'Disabled'), 'info');
+    });
+    $(document).on('click', '#cs-save', () => {
+        const button = document.getElementById('cs-save');
+        if (button) {
+            announceAutoSaveIntent(button, null, button.dataset.changeNotice || 'Saving all changes…', 'cs-save');
+        }
+        commitProfileChanges({
+            message: 'Profile saved.',
+            recompile: true,
+            refreshFocusLock: true,
+        });
+    });
+    $(document).on('change', '#cs-profile-select', function() {
+        announceAutoSaveIntent(this, null, this?.dataset?.changeNotice || 'Switching profiles will auto-save pending edits.', 'cs-profile-select');
+        flushScheduledProfileAutoSave({ overrideMessage: null, showStatusMessage: false });
+        loadProfile($(this).val());
+    });
     $(document).on('click', '#cs-profile-save', () => {
-        const profile = getActiveProfile();
-        if (!profile) return;
-        Object.assign(profile, saveCurrentProfileData());
-        persistSettings('Profile saved.');
-        loadProfile(settings.activeProfile);
+        const button = document.getElementById('cs-profile-save');
+        if (button) {
+            announceAutoSaveIntent(button, null, button.dataset.changeNotice || 'Saving profile immediately.', 'cs-profile-save');
+        }
+        commitProfileChanges({
+            message: 'Profile saved.',
+            recompile: true,
+            refreshFocusLock: true,
+        });
     });
     $(document).on('click', '#cs-profile-saveas', () => {
         const desiredName = normalizeProfileNameInput($("#cs-profile-name").val());
         if (!desiredName) { showStatus('Enter a name to save a new profile.', 'error'); return; }
         if (settings.profiles[desiredName]) { showStatus('A profile with that name already exists.', 'error'); return; }
+        flushScheduledProfileAutoSave({ overrideMessage: null, showStatusMessage: false });
+        const button = document.getElementById('cs-profile-saveas');
+        if (button) {
+            announceAutoSaveIntent(button, null, button.dataset.changeNotice, 'cs-profile-saveas');
+        }
         const profileData = normalizeProfile(saveCurrentProfileData(), PROFILE_DEFAULTS);
         settings.profiles[desiredName] = profileData;
         settings.activeProfile = desiredName;
@@ -3912,6 +4249,11 @@ function wireUI() {
         if (!newName) { showStatus('Enter a new name to rename this profile.', 'error'); return; }
         if (newName === oldName) { showStatus('The profile already uses that name.', 'info'); return; }
         if (settings.profiles[newName]) { showStatus('A profile with that name already exists.', 'error'); return; }
+        flushScheduledProfileAutoSave({ overrideMessage: null, showStatusMessage: false });
+        const button = document.getElementById('cs-profile-rename');
+        if (button) {
+            announceAutoSaveIntent(button, null, button.dataset.changeNotice, 'cs-profile-rename');
+        }
         settings.profiles[newName] = settings.profiles[oldName];
         delete settings.profiles[oldName];
         settings.activeProfile = newName;
@@ -3921,6 +4263,11 @@ function wireUI() {
         persistSettings(`Renamed profile to "${escapeHtml(newName)}".`, 'info');
     });
     $(document).on('click', '#cs-profile-new', () => {
+        flushScheduledProfileAutoSave({ overrideMessage: null, showStatusMessage: false });
+        const button = document.getElementById('cs-profile-new');
+        if (button) {
+            announceAutoSaveIntent(button, null, button.dataset.changeNotice, 'cs-profile-new');
+        }
         const baseName = normalizeProfileNameInput($("#cs-profile-name").val()) || 'New Profile';
         const uniqueName = getUniqueProfileName(baseName);
         settings.profiles[uniqueName] = structuredClone(PROFILE_DEFAULTS);
@@ -3933,6 +4280,11 @@ function wireUI() {
     $(document).on('click', '#cs-profile-duplicate', () => {
         const activeProfile = getActiveProfile();
         if (!activeProfile) return;
+        flushScheduledProfileAutoSave({ overrideMessage: null, showStatusMessage: false });
+        const button = document.getElementById('cs-profile-duplicate');
+        if (button) {
+            announceAutoSaveIntent(button, null, button.dataset.changeNotice, 'cs-profile-duplicate');
+        }
         const baseName = normalizeProfileNameInput($("#cs-profile-name").val()) || `${settings.activeProfile} Copy`;
         const uniqueName = getUniqueProfileName(baseName);
         settings.profiles[uniqueName] = normalizeProfile(structuredClone(activeProfile), PROFILE_DEFAULTS);
@@ -3944,6 +4296,11 @@ function wireUI() {
     });
     $(document).on('click', '#cs-profile-delete', () => {
         if (Object.keys(settings.profiles).length <= 1) { showStatus("Cannot delete the last profile.", 'error'); return; }
+        flushScheduledProfileAutoSave({ overrideMessage: null, showStatusMessage: false });
+        const button = document.getElementById('cs-profile-delete');
+        if (button) {
+            announceAutoSaveIntent(button, null, button.dataset.changeNotice, 'cs-profile-delete');
+        }
         const profileNameToDelete = settings.activeProfile;
         if (confirm(`Are you sure you want to delete the profile "${profileNameToDelete}"?`)) {
             delete settings.profiles[profileNameToDelete];
@@ -3954,6 +4311,11 @@ function wireUI() {
         }
     });
     $(document).on('click', '#cs-profile-export', () => {
+        flushScheduledProfileAutoSave({ overrideMessage: null, showStatusMessage: false });
+        const button = document.getElementById('cs-profile-export');
+        if (button) {
+            announceAutoSaveIntent(button, null, button.dataset.changeNotice, 'cs-profile-export');
+        }
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({name: settings.activeProfile, data: getActiveProfile()}, null, 2));
         const dl = document.createElement('a');
         dl.setAttribute("href", dataStr);
@@ -3963,7 +4325,14 @@ function wireUI() {
         dl.remove();
         showStatus("Profile exported.", 'info');
     });
-    $(document).on('click', '#cs-profile-import', () => { $('#cs-profile-file-input').click(); });
+    $(document).on('click', '#cs-profile-import', () => {
+        flushScheduledProfileAutoSave({ overrideMessage: null, showStatusMessage: false });
+        const button = document.getElementById('cs-profile-import');
+        if (button) {
+            announceAutoSaveIntent(button, null, button.dataset.changeNotice, 'cs-profile-import');
+        }
+        $('#cs-profile-file-input').click();
+    });
     $(document).on('change', '#cs-profile-file-input', function(event) {
         const file = event.target.files[0]; if (!file) return;
         const reader = new FileReader();
@@ -4009,11 +4378,20 @@ function wireUI() {
             return;
         }
         const preset = PRESETS[presetKey];
+        flushScheduledProfileAutoSave({ overrideMessage: null, showStatusMessage: false });
+        const button = document.getElementById('cs-preset-load');
+        if (button) {
+            announceAutoSaveIntent(button, null, button.dataset.changeNotice, 'cs-preset-load');
+        }
         if (confirm(`This will apply the "${preset.name}" preset to your current profile ("${settings.activeProfile}").\n\nYour other settings like character patterns and mappings will be kept. Continue?`)) {
             const currentProfile = getActiveProfile();
             Object.assign(currentProfile, preset.settings);
-            loadProfile(settings.activeProfile); // Reload UI to show changes
-            persistSettings(`"${preset.name}" preset loaded.`);
+            loadProfile(settings.activeProfile);
+            commitProfileChanges({
+                message: `"${preset.name}" preset loaded.`,
+                recompile: true,
+                refreshFocusLock: true,
+            });
         }
     });
     $(document).on('click', '#cs-score-preset-apply', () => {
@@ -4022,9 +4400,16 @@ function wireUI() {
             showStatus('Select a scoring preset to apply.', 'error');
             return;
         }
+        flushScheduledProfileAutoSave({ overrideMessage: null, showStatusMessage: false });
+        const button = document.getElementById('cs-score-preset-apply');
+        if (button) {
+            announceAutoSaveIntent(button, null, button.dataset.changeNotice, 'cs-score-preset-apply');
+        }
         if (applyScorePresetByName(selected)) {
             setActiveScorePreset(selected);
-            persistSettings(`Applied scoring preset "${escapeHtml(selected)}".`);
+            commitProfileChanges({
+                message: `Applied scoring preset "${escapeHtml(selected)}".`,
+            });
         } else {
             showStatus('Unable to apply the selected preset.', 'error');
         }
@@ -4034,6 +4419,11 @@ function wireUI() {
         if (!selected) {
             showStatus('Select a preset to overwrite or use Save As to create a new one.', 'error');
             return;
+        }
+        flushScheduledProfileAutoSave({ overrideMessage: null, showStatusMessage: false });
+        const button = document.getElementById('cs-score-preset-save');
+        if (button) {
+            announceAutoSaveIntent(button, null, button.dataset.changeNotice, 'cs-score-preset-save');
         }
         const store = getScorePresetStore();
         const preset = store?.[selected];
@@ -4057,6 +4447,11 @@ function wireUI() {
             showStatus('Enter a name before saving a new scoring preset.', 'error');
             return;
         }
+        flushScheduledProfileAutoSave({ overrideMessage: null, showStatusMessage: false });
+        const button = document.getElementById('cs-score-preset-saveas');
+        if (button) {
+            announceAutoSaveIntent(button, null, button.dataset.changeNotice, 'cs-score-preset-saveas');
+        }
         if (BUILTIN_SCORE_PRESET_KEYS.has(desired)) {
             showStatus('That name is reserved for a built-in preset. Please choose another.', 'error');
             return;
@@ -4077,6 +4472,11 @@ function wireUI() {
         if (!selected) {
             showStatus('Select a preset to rename.', 'error');
             return;
+        }
+        flushScheduledProfileAutoSave({ overrideMessage: null, showStatusMessage: false });
+        const button = document.getElementById('cs-score-preset-rename');
+        if (button) {
+            announceAutoSaveIntent(button, null, button.dataset.changeNotice, 'cs-score-preset-rename');
         }
         const store = getScorePresetStore();
         const preset = store?.[selected];
@@ -4128,6 +4528,11 @@ function wireUI() {
             showStatus('Select a preset to delete.', 'error');
             return;
         }
+        flushScheduledProfileAutoSave({ overrideMessage: null, showStatusMessage: false });
+        const button = document.getElementById('cs-score-preset-delete');
+        if (button) {
+            announceAutoSaveIntent(button, null, button.dataset.changeNotice, 'cs-score-preset-delete');
+        }
         const store = getScorePresetStore();
         const preset = store?.[selected];
         if (!preset) {
@@ -4171,9 +4576,19 @@ function wireUI() {
             recompileRegexes();
             refreshCoverageFromLastReport();
             showStatus(`Added "${escapeHtml(value)}" to ${field.replace(/([A-Z])/g, ' $1').toLowerCase()}.`, 'success');
+            scheduleProfileAutoSave({
+                key: field,
+                element: this,
+                requiresRecompile: AUTO_SAVE_RECOMPILE_KEYS.has(field),
+            });
         }
     });
     $(document).on('click', '#cs-focus-lock-toggle', async () => {
+        flushScheduledProfileAutoSave({ overrideMessage: null, showStatusMessage: false });
+        const button = document.getElementById('cs-focus-lock-toggle');
+        if (button) {
+            announceAutoSaveIntent(button, null, button.dataset.changeNotice, 'cs-focus-lock-toggle');
+        }
         if (settings.focusLock.character) {
             settings.focusLock.character = null;
             await manualReset();
@@ -4188,6 +4603,10 @@ function wireUI() {
     $(document).on('click', '#cs-mapping-add', () => {
         const profile = getActiveProfile();
         if (profile) {
+            const button = document.getElementById('cs-mapping-add');
+            if (button) {
+                announceAutoSaveIntent(button, null, button.dataset.changeNotice, 'cs-mapping-add');
+            }
             profile.mappings.push(markMappingForInitialCollapse(normalizeMappingEntry({ name: "", defaultFolder: "", outfits: [] })));
             renderMappings(profile);
             rebuildMappingLookup(profile);
@@ -4204,6 +4623,11 @@ function wireUI() {
             profile.mappings.splice(idx, 1);
             renderMappings(profile); // Re-render to update indices
             rebuildMappingLookup(profile);
+            scheduleProfileAutoSave({
+                reason: 'character mappings',
+                element: this,
+                requiresMappingRebuild: true,
+            });
         }
     });
     $(document).on('change', '#cs-outfits-enable', function() {
@@ -4219,6 +4643,10 @@ function wireUI() {
         if (!profile) {
             return;
         }
+        const button = document.getElementById('cs-outfit-add-character');
+        if (button) {
+            announceAutoSaveIntent(button, 'character mappings', button.dataset.changeNotice, button.dataset.changeNoticeKey || 'cs-outfit-add-character');
+        }
         profile.mappings.push(markMappingForInitialCollapse(normalizeMappingEntry({ name: '', defaultFolder: '', outfits: [] })));
         renderMappings(profile);
         rebuildMappingLookup(profile);
@@ -4231,6 +4659,11 @@ function wireUI() {
                 newCard.find('.cs-outfit-character-name').trigger('focus');
             }
         }
+        scheduleProfileAutoSave({
+            reason: 'character mappings',
+            element: button || null,
+            requiresMappingRebuild: true,
+        });
     });
     $(document).on('input', '#cs-mappings-tbody .map-name', function() {
         const idx = parseInt($(this).closest('tr').attr('data-idx'), 10);
@@ -4243,12 +4676,22 @@ function wireUI() {
             profile.mappings[idx].name = value.trim();
         }
         $(`.cs-outfit-card[data-idx="${idx}"]`).find('.cs-outfit-character-name').val(value);
+        scheduleProfileAutoSave({
+            reason: 'character mappings',
+            element: this,
+            requiresMappingRebuild: true,
+        });
     });
-    $(document).on('change', '#cs-mappings-tbody .map-name', () => {
+    $(document).on('change', '#cs-mappings-tbody .map-name', function() {
         const profile = getActiveProfile();
         if (profile) {
             rebuildMappingLookup(profile);
         }
+        scheduleProfileAutoSave({
+            reason: 'character mappings',
+            element: this,
+            requiresMappingRebuild: true,
+        });
     });
     $(document).on('input', '#cs-mappings-tbody .map-folder', function() {
         const idx = parseInt($(this).closest('tr').attr('data-idx'), 10);
@@ -4262,12 +4705,22 @@ function wireUI() {
             profile.mappings[idx].folder = value.trim();
         }
         $(`.cs-outfit-card[data-idx="${idx}"]`).find('.cs-outfit-default-folder').val(value);
+        scheduleProfileAutoSave({
+            reason: 'character mappings',
+            element: this,
+            requiresMappingRebuild: true,
+        });
     });
-    $(document).on('change', '#cs-mappings-tbody .map-folder', () => {
+    $(document).on('change', '#cs-mappings-tbody .map-folder', function() {
         const profile = getActiveProfile();
         if (profile) {
             rebuildMappingLookup(profile);
         }
+        scheduleProfileAutoSave({
+            reason: 'character mappings',
+            element: this,
+            requiresMappingRebuild: true,
+        });
     });
     $(document).on('click', '#cs-regex-test-button', testRegexPattern);
     $(document).on('click', '#cs-regex-test-copy', copyTesterReport);

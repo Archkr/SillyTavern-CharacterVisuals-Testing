@@ -73,6 +73,25 @@ export function normalizeMappingEntry(entry = {}) {
         outfits,
     };
 
+    const existingCardId = typeof source.__cardId === 'string'
+        ? source.__cardId
+        : typeof cloned.__cardId === 'string'
+            ? cloned.__cardId
+            : null;
+
+    if (existingCardId) {
+        try {
+            Object.defineProperty(normalized, "__cardId", {
+                value: existingCardId,
+                enumerable: false,
+                configurable: true,
+                writable: true,
+            });
+        } catch (err) {
+            normalized.__cardId = existingCardId;
+        }
+    }
+
     if (defaultFolder) {
         normalized.folder = defaultFolder;
     } else if (typeof normalized.folder === 'string') {
@@ -90,8 +109,26 @@ export function normalizeProfile(profile = {}, defaults = {}) {
     const source = profile && typeof profile === 'object' ? (safeClone(profile) || {}) : {};
     const merged = Object.assign(base, source);
 
+    const originalMappings = Array.isArray(profile?.mappings) ? profile.mappings : [];
+
     if (Array.isArray(source.mappings)) {
-        merged.mappings = source.mappings.map((mapping) => normalizeMappingEntry(mapping));
+        merged.mappings = source.mappings.map((mapping, index) => {
+            const normalized = normalizeMappingEntry(mapping);
+            const original = originalMappings[index];
+            const originalCardId = typeof original?.__cardId === 'string' ? original.__cardId : null;
+            if (originalCardId && typeof normalized.__cardId !== 'string') {
+                try {
+                    Object.defineProperty(normalized, "__cardId", {
+                        value: originalCardId,
+                        enumerable: false,
+                        configurable: true,
+                    });
+                } catch (err) {
+                    normalized.__cardId = originalCardId;
+                }
+            }
+            return normalized;
+        });
     } else {
         merged.mappings = [];
     }
