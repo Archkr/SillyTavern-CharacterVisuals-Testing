@@ -11,6 +11,7 @@ const {
     resolveOutfitForMatch,
     evaluateSwitchDecision,
     rebuildMappingLookup,
+    buildVariantFolderPath,
     extensionName,
 } = await import("../index.js");
 
@@ -195,6 +196,18 @@ test("resolveOutfitForMatch breaks ties using awareness specificity", () => {
     });
 
     assert.equal(result.folder, "gale/aware");
+});
+
+test("buildVariantFolderPath roots selections beneath the default folder", () => {
+    const mapping = { name: "Tohka Yatogami", defaultFolder: "Tohka" };
+    assert.equal(buildVariantFolderPath(mapping, "Adonai Melek"), "Tohka/Adonai Melek");
+    assert.equal(buildVariantFolderPath(mapping, "Tohka/Adonai Melek"), "Tohka/Adonai Melek");
+
+    const nested = { name: "Alice", defaultFolder: "Series/Alice" };
+    assert.equal(buildVariantFolderPath(nested, "Battle"), "Series/Alice/Battle");
+    assert.equal(buildVariantFolderPath(nested, "Series/Alice/Casual"), "Series/Alice/Casual");
+
+    assert.equal(buildVariantFolderPath("Charlie", "Variant"), "Charlie/Variant");
 });
 
 test("evaluateSwitchDecision caches outfit selections", () => {

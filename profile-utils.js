@@ -133,6 +133,8 @@ export function normalizeProfile(profile = {}, defaults = {}) {
         merged.mappings = [];
     }
 
+    merged.enableOutfits = true;
+
     return merged;
 }
 
