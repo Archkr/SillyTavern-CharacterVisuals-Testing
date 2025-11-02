@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { loadProfiles, normalizeProfile, mappingHasIdentity } from '../profile-utils.js';
+import { loadProfiles, normalizeProfile, mappingHasIdentity, prepareMappingsForSave } from '../profile-utils.js';
 
 const PROFILE_DEFAULTS = {
     mappings: [],
@@ -100,4 +100,48 @@ test('mappingHasIdentity accepts partially configured character slots', () => {
     assert.equal(mappingHasIdentity({ folder: 'legacy/folder' }), true, 'legacy folder field should mark mapping as persistent');
     const normalized = normalizeProfile({ mappings: [{ name: 'Temp' }] }, PROFILE_DEFAULTS).mappings[0];
     assert.equal(mappingHasIdentity(normalized, { normalized: true }), true, 'normalized mapping identity should be detected');
+});
+
+test('prepareMappingsForSave discards empty mappings without draft tracking', () => {
+    const mapping = { name: '', defaultFolder: '' };
+    Object.defineProperty(mapping, '__cardId', {
+        value: 'card-empty',
+        enumerable: false,
+        configurable: true,
+    });
+
+    const prepared = prepareMappingsForSave([mapping], new Set());
+
+    assert.equal(prepared.length, 0, 'blank mappings without draft ids should be dropped');
+});
+
+test('prepareMappingsForSave preserves draft mappings with tracked ids', () => {
+    const mapping = { name: '', defaultFolder: '', outfits: ['draft/folder'] };
+    Object.defineProperty(mapping, '__cardId', {
+        value: 'card-draft',
+        enumerable: false,
+        configurable: true,
+    });
+
+    const drafts = new Set(['card-draft']);
+    const prepared = prepareMappingsForSave([mapping], drafts);
+
+    assert.equal(prepared.length, 1, 'draft mappings should persist while being edited');
+    assert.deepEqual(prepared[0].outfits, ['draft/folder'], 'draft mappings should retain outfits');
+    assert.equal(drafts.has('card-draft'), true, 'draft id should remain tracked until mapping gains identity');
+});
+
+test('prepareMappingsForSave clears draft tracking once mapping gains identity', () => {
+    const mapping = { name: 'Finished', defaultFolder: '', outfits: [] };
+    Object.defineProperty(mapping, '__cardId', {
+        value: 'card-finished',
+        enumerable: false,
+        configurable: true,
+    });
+
+    const drafts = new Set(['card-finished']);
+    const prepared = prepareMappingsForSave([mapping], drafts);
+
+    assert.equal(prepared.length, 1, 'completed mappings should be preserved');
+    assert.equal(drafts.has('card-finished'), false, 'draft tracking should clear after mapping gains identity');
 });
