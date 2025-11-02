@@ -5,7 +5,7 @@ import { loadProfiles, normalizeProfile } from '../profile-utils.js';
 
 const PROFILE_DEFAULTS = {
     mappings: [],
-    enableOutfits: false,
+    enableOutfits: true,
 };
 
 test('loadProfiles wraps legacy mapping entries with default folder', () => {
@@ -20,7 +20,7 @@ test('loadProfiles wraps legacy mapping entries with default folder', () => {
     const loaded = loadProfiles(legacyProfiles, PROFILE_DEFAULTS);
 
     assert.ok(loaded.Legacy, 'profile should exist after load');
-    assert.equal(loaded.Legacy.enableOutfits, false, 'legacy profile should adopt default enableOutfits flag');
+    assert.equal(loaded.Legacy.enableOutfits, true, 'legacy profile should default outfit automation to enabled');
     assert.equal(loaded.Legacy.mappings.length, 1, 'legacy mapping should be preserved');
 
     const mapping = loaded.Legacy.mappings[0];
@@ -32,6 +32,7 @@ test('loadProfiles wraps legacy mapping entries with default folder', () => {
     const serialized = JSON.parse(JSON.stringify(loaded.Legacy));
     const rehydrated = normalizeProfile(serialized, PROFILE_DEFAULTS);
     assert.deepEqual(rehydrated.mappings, loaded.Legacy.mappings, 'legacy mapping should round-trip through serialization');
+    assert.equal(rehydrated.enableOutfits, true, 'legacy profile should remain outfit-enabled after normalization');
 });
 
 test('loadProfiles preserves enableOutfits flag and outfit arrays', () => {
@@ -64,6 +65,15 @@ test('loadProfiles preserves enableOutfits flag and outfit arrays', () => {
     const rehydrated = normalizeProfile(serialized, PROFILE_DEFAULTS);
     assert.deepEqual(rehydrated.mappings, loaded.Modern.mappings, 'modern mapping should round-trip through serialization');
     assert.equal(rehydrated.enableOutfits, true, 'modern profile should preserve enableOutfits flag');
+});
+
+test('normalizeProfile coerces disabled outfit automation to enabled', () => {
+    const profile = normalizeProfile({
+        mappings: [],
+        enableOutfits: false,
+    }, PROFILE_DEFAULTS);
+
+    assert.equal(profile.enableOutfits, true, 'outfit automation should always normalize to enabled');
 });
 
 test('normalizeProfile preserves non-enumerable mapping identifiers', () => {

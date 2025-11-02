@@ -175,7 +175,7 @@ Fine-tune responsiveness and tie-breaking behaviour:
 - **Detection Bias** – Slider balancing match priority versus recency; positive numbers favour dialogue/action tags, negative values favour the latest mention.
 
 ### Outfit Lab
-The Outfit Lab is the home for outfit-aware automation. Variants saved here run in the detection engine as soon as **Enable Outfit Automation** is toggled on for the active profile.
+The Outfit Lab is the home for outfit-aware automation. Variants saved here run in the detection engine as soon as you save them for the active profile.
 
 #### 1. Prepare your character folders
 Keep your prototypes in an `Outfit Lab` subdirectory under the character’s main folder. Each outfit variant receives its own subfolder, and every variant should reuse the same expression filenames as the parent directory so expression lookups remain valid.
@@ -201,8 +201,8 @@ SillyTavern/data/default-user/characters/Mythic Frontier/
 - Each variant inherits the base outfit’s expression manifest. Missing files fall back to whatever PNGs exist in the variant directory; anything absent simply cannot render. Drop at least a `portrait.png` in every folder so fallbacks always have artwork.
 - Store shared assets (e.g., accessories or props) alongside the variant art if you reference them directly. SillyTavern only serves files that live inside the selected outfit directory.
 
-#### 2. Enable the lab in settings
-Open **Settings → Extensions → Costume Switcher → Outfits**. The editor stays read-only until you flip **Enable Outfit Automation** on. Once enabled you can add, edit, or remove variants; turning it back off preserves the data but keeps the profile on its default folders.
+#### 2. Open the lab in settings
+Open **Settings → Extensions → Costume Switcher → Outfits**. The editor auto-saves changes after each interaction, and automation stays active for every character you configure.
 
 #### 3. Add characters and defaults
 Use **Add Character Slot** to create a card per character you want to experiment with. Fill in:
@@ -225,15 +225,14 @@ Inside each card, click **Add Outfit Variation** to define automated looks:
 Variants evaluate using priority before folder order. The engine selects the highest-priority variant that matches, breaking ties using trigger matches, awareness specificity, match-type filters, and finally the order the variants were created. If nothing qualifies the character falls back to the card’s default folder.
 
 #### 5. Test and iterate safely
-- Use the **Live Pattern Tester** with the lab enabled to verify which variant would win given sample prose. Trigger matches and awareness reasons appear in the report.
-- When a variant is ready for production, disable the lab, move the folder out of `Outfit Lab`, and update the default mapping, or leave the lab on to keep routing live traffic through the variants.
+- Use the **Live Pattern Tester** to verify which variant would win given sample prose. Trigger matches and awareness reasons appear in the report.
+- When a variant is ready for production, move the folder out of `Outfit Lab` and update the default mapping, or leave the lab entry in place to keep routing live traffic through the variants.
 - Profiles store their lab configuration alongside mappings. Exporting a profile JSON carries the variants with it for backups or sharing.
 
 #### Troubleshooting the Outfit Lab
 - **Variant never fires** – Confirm the variant folder path is relative to your `characters/` directory and spelled exactly like the filesystem entry. Use the new **Priority** field to make the desired variant win when multiple entries match the same context.
 - **Scene rules never pass** – Enable **Scene Roster** under **Detection Strategy** and keep the TTL high enough for characters to remain “active.” Names are normalised to lowercase; match the roster spelling (e.g., `captain ardan`).
 - **Missing expressions** – Copy the full expression set into each variant directory. Because the manifest is shared, only files that physically exist in the selected folder can render.
-- **Editor looks disabled** – Turn on **Enable Outfit Automation**. When off, the UI intentionally locks to prevent accidental edits during live sessions.
 - **Profile reset lost variants** – Variants live inside the active profile. Save the profile after edits and export periodic backups via the Profiles card.
 
 #### Organizing multi-character cards

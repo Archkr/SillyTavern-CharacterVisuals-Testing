@@ -180,26 +180,11 @@
                   <i class="fa-solid fa-user-astronaut"></i>
                   <div>
                     <h3>Outfit Lab</h3>
-                    <p>Manage per-character outfit automation. Variants you configure here run in the live detector when enabled.</p>
+                    <p>Manage per-character outfit automation. Variants you configure here run in the live detector as soon as they're saved.</p>
                   </div>
                 </div>
               </header>
               <div class="cs-card-body cs-card-body--stacked">
-                <label class="cs-master-toggle" for="cs-outfits-enable">
-                  <input id="cs-outfits-enable" type="checkbox" />
-                  <span class="cs-switch-thumb" aria-hidden="true"></span>
-                  <div class="cs-switch-copy">
-                    <strong>Enable Outfit Automation</strong>
-                    <small>Turns on outfit-aware detection for this profile. Disable it to keep characters on their default folders.</small>
-                  </div>
-                </label>
-                <div id="cs-outfit-disabled-notice" class="cs-outfit-disabled-notice" role="alert" hidden>
-                  <i class="fa-solid fa-flask"></i>
-                  <div>
-                    <strong>Enable outfit automation to edit variants.</strong>
-                    <p>The editor stays read-only while automation is off, but your saved outfits remain intact.</p>
-                  </div>
-                </div>
                 <div id="cs-outfit-editor" class="cs-outfit-editor" aria-live="polite" aria-busy="false">
                   <p class="cs-helper-text cs-outfit-editor-intro">
                     Add characters to manage nested outfit mappings. Variations can include triggers (one per line, supports <code>/regex/</code>), match-type filters, awareness requirements, and priority values before falling back to the default folder.

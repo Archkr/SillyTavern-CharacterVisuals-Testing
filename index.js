@@ -1654,7 +1654,6 @@ const uiMapping = {
     detectPossessive: { selector: '#cs-detect-possessive', type: 'checkbox' },
     detectPronoun: { selector: '#cs-detect-pronoun', type: 'checkbox' },
     detectGeneral: { selector: '#cs-detect-general', type: 'checkbox' },
-    enableOutfits: { selector: '#cs-outfits-enable', type: 'checkbox' },
     attributionVerbs: { selector: '#cs-attribution-verbs', type: 'csvTextarea' },
     actionVerbs: { selector: '#cs-action-verbs', type: 'csvTextarea' },
     pronounVocabulary: { selector: '#cs-pronoun-vocabulary', type: 'csvTextarea' },
@@ -2551,7 +2550,7 @@ function extractDirectoryFromFileList(fileList) {
     return '';
 }
 
-function buildVariantFolderPath(characterName, folderPath) {
+function buildVariantFolderPath(mappingOrName, folderPath) {
     const rawFolder = (folderPath || "").trim();
     if (!rawFolder) {
         return "";
@@ -2560,35 +2559,44 @@ function buildVariantFolderPath(characterName, folderPath) {
     if (!normalizedFolder) {
         return "";
     }
-    const rawName = (characterName || "").trim();
-    if (!rawName) {
-        return normalizedFolder;
+    const mapping = mappingOrName && typeof mappingOrName === "object" ? mappingOrName : null;
+    const candidates = [];
+    if (mapping) {
+        const defaultFolder = typeof mapping.defaultFolder === "string" ? mapping.defaultFolder.trim() : "";
+        const name = typeof mapping.name === "string" ? mapping.name.trim() : "";
+        if (defaultFolder) {
+            candidates.push(defaultFolder);
+        }
+        if (name) {
+            candidates.push(name);
+        }
+    } else {
+        const rawName = typeof mappingOrName === "string" ? mappingOrName.trim() : "";
+        if (rawName) {
+            candidates.push(rawName);
+        }
     }
-    const normalizedName = rawName.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, "");
-    if (!normalizedName) {
-        return normalizedFolder;
-    }
-    if (normalizedFolder === normalizedName || normalizedFolder.startsWith(`${normalizedName}/`)) {
-        return normalizedFolder;
-    }
-    return `${normalizedName}/${normalizedFolder}`;
-}
 
-function updateOutfitLabEnabledState(enabled) {
-    const editor = $('#cs-outfit-editor');
-    const notice = $('#cs-outfit-disabled-notice');
-    const addButton = $('#cs-outfit-add-character');
-    const isEnabled = Boolean(enabled);
-    if (editor.length) {
-        editor.toggleClass('is-disabled', !isEnabled);
-        editor.attr('aria-disabled', String(!isEnabled));
+    const normalizedCandidates = candidates
+        .map((candidate) => candidate.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, ""))
+        .filter(Boolean)
+        .map((normalized) => ({
+            original: normalized,
+            lower: normalized.toLowerCase(),
+        }));
+
+    const folderLower = normalizedFolder.toLowerCase();
+    for (const candidate of normalizedCandidates) {
+        if (folderLower === candidate.lower || folderLower.startsWith(`${candidate.lower}/`)) {
+            return normalizedFolder;
+        }
     }
-    if (notice.length) {
-        notice.prop('hidden', isEnabled);
+
+    if (normalizedCandidates.length) {
+        return `${normalizedCandidates[0].original}/${normalizedFolder}`;
     }
-    if (addButton.length) {
-        addButton.prop('disabled', !isEnabled);
-    }
+
+    return normalizedFolder;
 }
 
 function createOutfitVariantElement(profile, mapping, mappingIdx, variant, variantIndex) {
@@ -2658,7 +2666,7 @@ function createOutfitVariantElement(profile, mapping, mappingIdx, variant, varia
     folderPicker.on('change', function() {
         const folderPath = extractDirectoryFromFileList(this.files || []);
         if (folderPath) {
-            const combinedPath = buildVariantFolderPath(mapping?.name, folderPath);
+            const combinedPath = buildVariantFolderPath(mapping, folderPath);
             folderInput.val(combinedPath);
             folderInput.trigger('input');
         }
@@ -3113,8 +3121,6 @@ function renderOutfitLab(profile) {
             container.append(createOutfitCard(profile, normalized, idx));
         });
     }
-
-    updateOutfitLabEnabledState(profile?.enableOutfits);
 }
 
 function renderMappings(profile) {
@@ -4625,14 +4631,6 @@ function wireUI() {
     });
     $(document).on('input', '#cs-detection-bias', function() { $("#cs-detection-bias-value").text($(this).val()); });
     $(document).on('click', '#cs-reset', manualReset);
-    $(document).on('change', '#cs-outfits-enable', function() {
-        const profile = getActiveProfile();
-        const enabled = $(this).prop('checked');
-        if (profile) {
-            profile.enableOutfits = enabled;
-        }
-        updateOutfitLabEnabledState(enabled);
-    });
     $(document).on('click', '#cs-outfit-add-character', () => {
         const profile = getActiveProfile();
         if (!profile) {
@@ -5312,6 +5310,7 @@ export {
     getWinner,
     findBestMatch,
     adjustWindowForTrim,
+    buildVariantFolderPath,
 };
 
 function load() {
