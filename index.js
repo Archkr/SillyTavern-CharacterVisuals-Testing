@@ -32,7 +32,7 @@ import {
     mergeDetectionsForReport,
     summarizeDetections,
 } from "./src/report-utils.js";
-import { loadProfiles, normalizeProfile, normalizeMappingEntry, mappingHasIdentity } from "./profile-utils.js";
+import { loadProfiles, normalizeProfile, normalizeMappingEntry, mappingHasIdentity, prepareMappingsForSave } from "./profile-utils.js";
 
 const extensionName = "SillyTavern-CostumeSwitch-Testing";
 const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
@@ -387,6 +387,7 @@ const state = {
         requiresFocusLockRefresh: false,
         lastNoticeAt: new Map(),
     },
+    draftMappingIds: new Set(),
 };
 
 let nextOutfitCardId = 1;
@@ -2135,18 +2136,8 @@ function saveCurrentProfileData() {
     }
     const activeProfile = getActiveProfile();
     const mappingSource = Array.isArray(activeProfile?.mappings) ? activeProfile.mappings : [];
-    profileData.mappings = mappingSource
-        .map((entry) => {
-            const normalized = normalizeMappingEntry(entry);
-            if (!mappingHasIdentity(normalized, { normalized: true })) {
-                return null;
-            }
-            if (Array.isArray(normalized.outfits)) {
-                normalized.outfits = cloneOutfitList(normalized.outfits);
-            }
-            return normalized;
-        })
-        .filter(Boolean);
+    const draftIds = state?.draftMappingIds instanceof Set ? state.draftMappingIds : new Set();
+    profileData.mappings = prepareMappingsForSave(mappingSource, draftIds);
     return profileData;
 }
 
@@ -2159,43 +2150,6 @@ const OUTFIT_MATCH_KIND_OPTIONS = [
     { value: "possessive", label: "Possessive mentions (Alice's staff)" },
     { value: "name", label: "General name hits (any mention)" },
 ];
-
-function cloneOutfitList(outfits) {
-    if (!Array.isArray(outfits)) {
-        return [];
-    }
-
-    const cloned = [];
-    outfits.forEach((entry) => {
-        if (entry == null) {
-            return;
-        }
-        if (typeof entry === 'string') {
-            const trimmed = entry.trim();
-            if (trimmed) {
-                cloned.push(trimmed);
-            }
-            return;
-        }
-        if (typeof structuredClone === 'function') {
-            try {
-                cloned.push(structuredClone(entry));
-                return;
-            } catch (err) {
-                // Fall back to JSON-based cloning
-            }
-        }
-        try {
-            cloned.push(JSON.parse(JSON.stringify(entry)));
-        } catch (err) {
-            if (typeof entry === 'object') {
-                cloned.push({ ...entry });
-            }
-        }
-    });
-
-    return cloned;
-}
 
 function ensureAutoSaveState() {
     if (!state.autoSave) {
@@ -2920,6 +2874,9 @@ function createOutfitCard(profile, mapping, idx) {
             announceAutoSaveIntent(removeButton[0], 'character mappings', removeButton[0].dataset.changeNotice, removeButton[0].dataset.changeNoticeKey);
             if (!profile?.mappings) return;
             state.outfitCardCollapse?.delete(cardId);
+            if (cardId && state?.draftMappingIds instanceof Set) {
+                state.draftMappingIds.delete(cardId);
+            }
             profile.mappings.splice(idx, 1);
             renderMappings(profile);
             rebuildMappingLookup(profile);
@@ -4641,8 +4598,16 @@ function wireUI() {
             announceAutoSaveIntent(button, 'character mappings', button.dataset.changeNotice, button.dataset.changeNoticeKey || 'cs-outfit-add-character');
         }
         profile.mappings.push(markMappingForInitialCollapse(normalizeMappingEntry({ name: '', defaultFolder: '', outfits: [] })));
+        const newIndex = profile.mappings.length - 1;
         renderMappings(profile);
         rebuildMappingLookup(profile);
+        if (newIndex >= 0) {
+            const addedMapping = profile.mappings[newIndex];
+            const cardId = ensureMappingCardId(addedMapping);
+            if (cardId && state?.draftMappingIds instanceof Set) {
+                state.draftMappingIds.add(cardId);
+            }
+        }
         const newCard = $('#cs-outfit-character-list .cs-outfit-card').last();
         if (newCard.length) {
             const toggle = newCard.find('.cs-outfit-card-toggle');
@@ -5295,6 +5260,7 @@ const resetGlobalState = () => {
         latestTopRanking: { bufKey: null, ranking: [], fullRanking: [], updatedAt: Date.now() },
         currentGenerationKey: null,
         messageKeyQueue: [],
+        draftMappingIds: new Set(),
     });
     clearSessionTopCharacters();
 };
