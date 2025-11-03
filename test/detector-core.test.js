@@ -116,3 +116,41 @@ test("collectDetections tolerates punctuation and honorifics near verbs", () => 
     assert.ok(actionMatches.includes("Li"), "expected Li action detection for compound name with dash");
     assert.ok(actionMatches.includes("Anne"), "expected Anne action detection for hyphenated surname and ellipsis");
 });
+
+test("collectDetections supports descriptive inserts before verbs", () => {
+    const profile = {
+        patterns: ["Maya", "Jules"],
+        ignorePatterns: [],
+        attributionVerbs: [...DEFAULT_ATTRIBUTION_VERB_FORMS, "said"],
+        actionVerbs: DEFAULT_ACTION_VERB_FORMS,
+        pronounVocabulary: ["he", "she", "they"],
+        detectAttribution: true,
+        detectAction: true,
+        detectVocative: false,
+        detectPossessive: false,
+        detectPronoun: false,
+        detectGeneral: false,
+    };
+
+    const { regexes } = compileProfileRegexes(profile, {
+        unicodeWordPattern: "[\\p{L}\\p{M}\\p{N}_]",
+        defaultPronouns: ["he", "she", "they"],
+    });
+
+    const sample = "\"Hold position,\" Maya, the ever-watchful captain of the gate, quietly said before turning away. "
+        + "Jules (still catching his breath), shoulders tense, with a wary stride and focused eyes hurried toward the barricade.";
+
+    const matches = collectDetections(sample, profile, regexes, {
+        priorityWeights: {
+            speaker: 5,
+            attribution: 4,
+            action: 3,
+        },
+    });
+
+    const attributionMatches = matches.filter(match => match.matchKind === "attribution").map(match => match.name);
+    const actionMatches = matches.filter(match => match.matchKind === "action").map(match => match.name);
+
+    assert.ok(attributionMatches.includes("Maya"), "expected Maya attribution detection with descriptive clause");
+    assert.ok(actionMatches.includes("Jules"), "expected Jules action detection with parenthetical and long runup");
+});

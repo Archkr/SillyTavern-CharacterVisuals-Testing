@@ -242,8 +242,13 @@ export function compileProfileRegexes(profile = {}, options = {}) {
     const punctuationSpacer = `(?:${punctuationSegment})*`;
     const compoundTokenPattern = `(?:(?:\\s+|[-‐‑–—―]\\s*)(?=[\\p{Lu}\\p{Lt}\\p{Lo}])(?:${unicodeWordPattern}+))`;
     const compoundBridge = `(?:${punctuationSpacer}${compoundTokenPattern})?`;
+    const descriptorWordPattern = `(?:${unicodeWordPattern}+(?:[-‐‑–—―]${unicodeWordPattern}+)*)`;
+    const descriptorSequence = `(?:${descriptorWordPattern}(?:\\s+${descriptorWordPattern}){0,7})`;
+    const commaDescriptor = `(?:,\\s*(?:${descriptorSequence}))`;
+    const parentheticalDescriptor = `(?:\\s*\\(\\s*(?:${descriptorSequence})\\s*\\))`;
+    const descriptorPattern = `(?:${commaDescriptor}|${parentheticalDescriptor}){0,3}`;
     const separatorPattern = `(?:${punctuationSegment}|\\s+)+`;
-    const nameTailPattern = `${honorificPattern}(?:['’]s)?${compoundBridge}${separatorPattern}`;
+    const nameTailPattern = `${honorificPattern}(?:['’]s)?${compoundBridge}${descriptorPattern}${separatorPattern}`;
 
     const ignored = (profile.ignorePatterns || []).map(value => String(value ?? "").trim().toLowerCase()).filter(Boolean);
     const effectivePatterns = (profile.patterns || [])
@@ -258,11 +263,12 @@ export function compileProfileRegexes(profile = {}, options = {}) {
     const pronounPattern = buildAlternation(pronounVocabulary);
 
     const speakerTemplate = "(?:^|[\\r\\n]+|[>\\]]\\s*)({{PATTERNS}})\\s*:";
+    const fillerRunupPattern = `(?:${unicodeWordPattern}+\\s+){0,7}?`;
     const attributionTemplate = attributionVerbsPattern
-        ? `${boundaryLookbehind}({{PATTERNS}})${nameTailPattern}(?:${attributionVerbsPattern})`
+        ? `${boundaryLookbehind}({{PATTERNS}})${nameTailPattern}${fillerRunupPattern}(?:${attributionVerbsPattern})`
         : null;
     const actionTemplate = actionVerbsPattern
-        ? `${boundaryLookbehind}({{PATTERNS}})${nameTailPattern}(?:${unicodeWordPattern}+\\s+){0,3}?(?:${actionVerbsPattern})`
+        ? `${boundaryLookbehind}({{PATTERNS}})${nameTailPattern}${fillerRunupPattern}(?:${actionVerbsPattern})`
         : null;
 
     const regexes = {
