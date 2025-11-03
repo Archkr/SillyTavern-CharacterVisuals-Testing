@@ -271,13 +271,15 @@ export function compileProfileRegexes(profile = {}, options = {}) {
         ? `${boundaryLookbehind}({{PATTERNS}})${nameTailPattern}${fillerRunupPattern}(?:${actionVerbsPattern})`
         : null;
 
+    const pronounLeadBoundary = `(?<!${unicodeWordPattern})\\b`;
+
     const regexes = {
         speakerRegex: buildRegex(effectivePatterns, speakerTemplate),
         attributionRegex: attributionTemplate ? buildRegex(effectivePatterns, attributionTemplate, { extraFlags: "u" }) : null,
         actionRegex: actionTemplate ? buildRegex(effectivePatterns, actionTemplate, { extraFlags: "u" }) : null,
         pronounRegex: (actionVerbsPattern && pronounPattern)
             ? new RegExp(
-                `(?:^|[\\r\\n]+)\\s*(?:${pronounPattern})(?:['’]s)?\\s+(?:${unicodeWordPattern}+\\s+){0,3}?(?:${actionVerbsPattern})`,
+                `${pronounLeadBoundary}(?:${pronounPattern})(?:['’]s)?\\s+(?:${unicodeWordPattern}+\\s+){0,3}?(?:${actionVerbsPattern})`,
                 "iu",
             )
             : null,

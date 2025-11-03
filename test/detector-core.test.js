@@ -154,3 +154,63 @@ test("collectDetections supports descriptive inserts before verbs", () => {
     assert.ok(attributionMatches.includes("Maya"), "expected Maya attribution detection with descriptive clause");
     assert.ok(actionMatches.includes("Jules"), "expected Jules action detection with parenthetical and long runup");
 });
+
+test("collectDetections links mid-sentence pronouns to the last subject", () => {
+    const profile = {
+        patterns: ["Kotori", "Reine", "Strike Team"],
+        ignorePatterns: [],
+        attributionVerbs: [],
+        actionVerbs: DEFAULT_ACTION_VERB_FORMS,
+        pronounVocabulary: ["he", "she", "they"],
+        detectAttribution: false,
+        detectAction: false,
+        detectVocative: false,
+        detectPossessive: false,
+        detectPronoun: true,
+        detectGeneral: false,
+    };
+
+    const { regexes } = compileProfileRegexes(profile, {
+        unicodeWordPattern: "[\\p{L}\\p{M}\\p{N}_]",
+        defaultPronouns: ["he", "she", "they"],
+    });
+
+    const fixtures = [
+        {
+            description: "conjunction lead-in",
+            subject: "Kotori",
+            text: "Kotori stepped beside the console, and he charged toward the hatch before the alarms stopped.",
+            expectedMatches: 1,
+        },
+        {
+            description: "punctuation lead-in",
+            subject: "Reine",
+            text: "Reine watched the monitors; she hurried to seal the conduit before the hull buckled.",
+            expectedMatches: 1,
+        },
+        {
+            description: "dash lead-in without spacing",
+            subject: "Strike Team",
+            text: "Strike Team assembled—they sprinted across the platform to reach the evac shuttle.",
+            expectedMatches: 1,
+        },
+    ];
+
+    for (const { description, subject, text, expectedMatches } of fixtures) {
+        const matches = collectDetections(text, profile, regexes, {
+            lastSubject: subject,
+        });
+
+        const pronounMatches = matches.filter(match => match.matchKind === "pronoun");
+
+        assert.equal(
+            pronounMatches.length,
+            expectedMatches,
+            `expected ${expectedMatches} pronoun match(es) for ${description}`,
+        );
+        assert.ok(
+            pronounMatches.every(match => match.name === subject),
+            `expected pronoun matches to reference ${subject} for ${description}`,
+        );
+    }
+});
