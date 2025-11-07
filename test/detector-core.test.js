@@ -78,6 +78,52 @@ test('collectDetections identifies action matches for narrative cues', () => {
     assert.ok(attributionMatches.includes('Yuzuru'), 'expected Yuzuru attribution detection');
 });
 
+test('collectDetections optionally scans inside dialogue when enabled', () => {
+    const profile = {
+        patterns: ['Kotori', 'Reine'],
+        ignorePatterns: [],
+        attributionVerbs: DEFAULT_ATTRIBUTION_VERB_FORMS,
+        actionVerbs: DEFAULT_ACTION_VERB_FORMS,
+        pronounVocabulary: ['he', 'she', 'they'],
+        detectAttribution: true,
+        detectAction: false,
+        detectVocative: false,
+        detectPossessive: false,
+        detectPronoun: false,
+        detectGeneral: false,
+    };
+
+    const { regexes } = compileProfileRegexes(profile, {
+        unicodeWordPattern: '[\\p{L}\\p{M}\\p{N}_]',
+        defaultPronouns: ['he', 'she', 'they'],
+    });
+
+    const sample = '“Kotori recounted the briefing,” Reine recounted.';
+
+    const defaultMatches = collectDetections(sample, profile, regexes, {
+        priorityWeights: {
+            speaker: 5,
+            attribution: 4,
+            action: 3,
+        },
+    });
+
+    const defaultAttribution = defaultMatches.filter(match => match.matchKind === 'attribution').map(match => match.name);
+    assert.ok(!defaultAttribution.includes('Kotori'), 'Kotori attribution inside quotes should be skipped by default');
+
+    const toggledMatches = collectDetections(sample, { ...profile, scanDialogueActions: true }, regexes, {
+        priorityWeights: {
+            speaker: 5,
+            attribution: 4,
+            action: 3,
+        },
+        scanDialogueActions: true,
+    });
+
+    const toggledAttribution = toggledMatches.filter(match => match.matchKind === 'attribution').map(match => match.name);
+    assert.ok(toggledAttribution.includes('Kotori'), 'Kotori attribution inside quotes should be detected when scanning dialogue');
+});
+
 test("collectDetections tolerates punctuation and honorifics near verbs", () => {
     const profile = {
         patterns: ["Kotori", "Li", "Anne"],

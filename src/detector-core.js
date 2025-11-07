@@ -302,6 +302,7 @@ export function collectDetections(text, profile = {}, regexes = {}, options = {}
     }
     const quoteRanges = options.quoteRanges || getQuoteRanges(text);
     const priorityWeights = options.priorityWeights || {};
+    const scanDialogueActions = Boolean(options.scanDialogueActions);
     const matches = [];
 
     const addMatch = (name, matchKind, index, priority) => {
@@ -325,14 +326,14 @@ export function collectDetections(text, profile = {}, regexes = {}, options = {}
     }
 
     if (profile.detectAttribution !== false && regexes.attributionRegex) {
-        findMatches(text, regexes.attributionRegex, quoteRanges).forEach(match => {
+        findMatches(text, regexes.attributionRegex, quoteRanges, { searchInsideQuotes: scanDialogueActions }).forEach(match => {
             const name = match.groups?.find(group => group)?.trim();
             addMatch(name, "attribution", match.index, priorityWeights.attribution);
         });
     }
 
     if (profile.detectAction !== false && regexes.actionRegex) {
-        findMatches(text, regexes.actionRegex, quoteRanges).forEach(match => {
+        findMatches(text, regexes.actionRegex, quoteRanges, { searchInsideQuotes: scanDialogueActions }).forEach(match => {
             const name = match.groups?.find(group => group)?.trim();
             addMatch(name, "action", match.index, priorityWeights.action);
         });
