@@ -302,6 +302,7 @@ const PROFILE_DEFAULTS = {
     detectPossessive: true,
     detectPronoun: true,
     detectGeneral: false,
+    scanDialogueActions: false,
     pronounVocabulary: [...DEFAULT_PRONOUNS],
     attributionVerbs: [...DEFAULT_ATTRIBUTION_VERB_FORMS],
     actionVerbs: [...DEFAULT_ACTION_VERB_FORMS],
@@ -612,6 +613,7 @@ function findAllMatches(combined) {
     return collectDetections(combined, profile, compiledRegexes, {
         priorityWeights: getPriorityWeights(profile),
         lastSubject,
+        scanDialogueActions: Boolean(profile.scanDialogueActions),
     });
 }
 
@@ -1659,6 +1661,7 @@ const uiMapping = {
     detectionBias: { selector: '#cs-detection-bias', type: 'range' },
     detectAttribution: { selector: '#cs-detect-attribution', type: 'checkbox' },
     detectAction: { selector: '#cs-detect-action', type: 'checkbox' },
+    scanDialogueActions: { selector: '#cs-scan-dialogue-actions', type: 'checkbox' },
     detectVocative: { selector: '#cs-detect-vocative', type: 'checkbox' },
     detectPossessive: { selector: '#cs-detect-possessive', type: 'checkbox' },
     detectPronoun: { selector: '#cs-detect-pronoun', type: 'checkbox' },
