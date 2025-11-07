@@ -79,6 +79,59 @@ function buildAlternation(list) {
         .join("|");
 }
 
+function gatherProfilePatterns(profile) {
+    const result = [];
+    const seen = new Set();
+
+    const add = (value) => {
+        const trimmed = String(value ?? "").trim();
+        if (!trimmed || seen.has(trimmed)) {
+            return;
+        }
+        seen.add(trimmed);
+        result.push(trimmed);
+    };
+
+    if (profile && Array.isArray(profile.patternSlots)) {
+        profile.patternSlots.forEach((slot) => {
+            if (!slot) {
+                return;
+            }
+            if (typeof slot === "string") {
+                add(slot);
+                return;
+            }
+            const name = typeof slot.name === "string" ? slot.name : null;
+            if (name) {
+                add(name);
+            }
+            const aliasSources = [
+                slot.aliases,
+                slot.patterns,
+                slot.alternateNames,
+                slot.names,
+                slot.variants,
+            ];
+            aliasSources.forEach((source) => {
+                if (!source) {
+                    return;
+                }
+                if (Array.isArray(source)) {
+                    source.forEach(add);
+                } else {
+                    add(source);
+                }
+            });
+        });
+    }
+
+    if (profile && Array.isArray(profile.patterns)) {
+        profile.patterns.forEach(add);
+    }
+
+    return result;
+}
+
 export function getQuoteRanges(text) {
     if (!text) {
         return [];
@@ -251,7 +304,7 @@ export function compileProfileRegexes(profile = {}, options = {}) {
     const nameTailPattern = `${honorificPattern}(?:['’]s)?${compoundBridge}${descriptorPattern}${separatorPattern}`;
 
     const ignored = (profile.ignorePatterns || []).map(value => String(value ?? "").trim().toLowerCase()).filter(Boolean);
-    const effectivePatterns = (profile.patterns || [])
+    const effectivePatterns = gatherProfilePatterns(profile)
         .map(value => String(value ?? "").trim())
         .filter(value => value && !ignored.includes(value.toLowerCase()));
 
