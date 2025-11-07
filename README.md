@@ -36,11 +36,12 @@ Under the hood the extension listens to streaming output from your model, scores
     8. [Live Pattern Tester](#live-pattern-tester)
     9. [Footer Controls](#footer-controls)
 8. [Understanding Live Tester Reports](#understanding-live-tester-reports)
-9. [Advanced Configuration Tips](#advanced-configuration-tips)
-10. [Slash Commands](#slash-commands)
-11. [Sharing Top Characters with Other Extensions](#sharing-top-characters-with-other-extensions)
-12. [Troubleshooting Checklist](#troubleshooting-checklist)
-13. [Support & Contributions](#support--contributions)
+9. [Action Beats Inside Dialogue](#action-beats-inside-dialogue)
+10. [Advanced Configuration Tips](#advanced-configuration-tips)
+11. [Slash Commands](#slash-commands)
+12. [Sharing Top Characters with Other Extensions](#sharing-top-characters-with-other-extensions)
+13. [Troubleshooting Checklist](#troubleshooting-checklist)
+14. [Support & Contributions](#support--contributions)
 
 ---
 
@@ -299,6 +300,31 @@ Every report copied from the tester includes:
 - **Top characters** – Ranking of the four strongest contenders including mention counts, roster status, and weighted scores.
 - **Key settings snapshot** – Cooldowns, thresholds, roster flag, and bias value in effect during the test.
 Attach these reports when filing bug reports or asking for tuning advice—everything needed to reproduce the issue is included.
+
+---
+
+## Action Beats Inside Dialogue
+Dialogue in long-form roleplay often includes *action beats*—short descriptions or tone cues tucked inside the same sentence as spoken words. Costume Switcher recognises these patterns so that switches stay accurate even when a character’s name is embedded between quotation marks.
+
+### Why the detector cares
+- Action beats often reintroduce a speaker without repeating a dialogue tag ("Alex said").
+- The inserted narration carries the character’s name, so recognising it lets the engine keep that character in focus without waiting for a fresh attribution verb.
+- Scenes with multiple speakers lean on these beats to show reactions ("She laughed, \"I told you so.\""). Without action detection, the costume might flicker to the wrong person.
+
+### How to make the most of it
+1. Enable **Detect Action** in **Detection Strategy**. This tells the engine to look for verbs and names inside the dialogue line itself.
+2. Keep your **Action Verbs** list stocked with the moves your characters perform while talking (e.g., "shrugged," "grinned," "adjusted"). Custom verbs help the detector catch more nuanced beats.
+3. Review the **Detection log** column in Live Tester reports. Matches with the `action` kind confirm that the beat contributed to the decision.
+
+### Example snippets the engine understands
+- "Listen," **Morgan whispered**, adjusting the lantern, "we can’t wait until dawn."  
+  The detector spots the verb "whispered" plus Morgan’s name between the two halves of the quote and keeps Morgan’s costume active.
+- "Hands off," **Captain Reyes said**, tightening their grip on the throttle, "or the hangar doors stay shut."  
+  The inserted clause reinforces that Reyes is still speaking even though the sentence stretches across multiple beats.
+- "If you’re staying," **Taylor added**, "grab a coat—" **they shivered** just looking at the frost.  
+  Both the mid-sentence tag and the trailing beat include Taylor’s name, giving the engine multiple action matches to confirm the speaker.
+
+Use these structures when testing profiles: if the Live Tester shows consistent `action` matches for beats like these, your dialogue-heavy stories will switch costumes without missing a step.
 
 ---
 
