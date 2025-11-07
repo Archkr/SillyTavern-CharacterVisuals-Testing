@@ -1,5 +1,5 @@
 # Heads up
-- This repository is my testing grounds for new updates for my extension in it's main repository. The public release of the extension is on v3.2.0, and this repository will become v3.3.0
+- This repository is my testing grounds for new updates for my extension in it's main repository. The public release of the extension is on v3.4.0, and this repository will become v3.5.0
 
 # SillyTavern Costume Switch contributor notes
 
@@ -8,3 +8,6 @@
 - Keep experimental or in-progress features clearly gated behind their feature flags.
 - Update or add tests in the `test/` directory when you change profile persistence or detection logic.
 - Document noteworthy UI affordances or feature flags in the settings copy so users understand experimental scope.
+
+# CostumeSwitch-v3.4.0
+- `CostumeSwitch-v3.4.0/` is what is currently released to the public. Do not edit anything in this directory.
