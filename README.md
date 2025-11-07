@@ -155,7 +155,7 @@ Create tailored setups for different stories or formats:
 
 ### Character Patterns & Filters
 Teach the detector which names to recognise:
-- **Active Characters** accepts plain names or `/regex/` entries—one per line.
+- **Active Characters** provides per-character slots with a primary name, optional alternate patterns (including `/regex/`), and an optional folder override for that character.
 - **Ignored Characters** suppresses specific matches without removing them from the character list.
 - **Veto Phrases** stops detection entirely for a message when the phrase or regex is found (useful for OOC tags).
 

@@ -261,6 +261,53 @@ test("collectDetections links mid-sentence pronouns to the last subject", () => 
     }
 });
 
+test('compileProfileRegexes derives patterns from structured slots', () => {
+    const profile = {
+        patternSlots: [
+            { name: 'Akiyama Ren', aliases: ['Ren', 'Aki'], folder: 'Characters/Akiyama Ren' },
+            { name: 'Maya' },
+        ],
+        ignorePatterns: ['Narrator'],
+        attributionVerbs: DEFAULT_ATTRIBUTION_VERB_FORMS,
+        actionVerbs: DEFAULT_ACTION_VERB_FORMS,
+        pronounVocabulary: ['he', 'she', 'they'],
+        detectAttribution: true,
+        detectAction: true,
+        detectVocative: true,
+        detectPossessive: false,
+        detectPronoun: false,
+        detectGeneral: false,
+    };
+
+    const { regexes, effectivePatterns } = compileProfileRegexes(profile, {
+        unicodeWordPattern: '[\\p{L}\\p{M}\\p{N}_]',
+        defaultPronouns: ['he', 'she', 'they'],
+    });
+
+    assert.ok(effectivePatterns.includes('Akiyama Ren'), 'primary slot name should be included');
+    assert.ok(effectivePatterns.includes('Ren'), 'aliases should contribute patterns');
+    assert.ok(effectivePatterns.includes('Aki'), 'secondary aliases should be included');
+    assert.ok(effectivePatterns.includes('Maya'), 'additional slots should be represented');
+
+    const primarySample = 'Akiyama Ren stepped forward toward the console.';
+    const aliasSample = 'Ren waved to the team with a grin.';
+
+    const primaryMatches = collectDetections(primarySample, profile, regexes, {
+        priorityWeights: {
+            action: 3,
+        },
+    }).map(match => match.name);
+
+    const aliasMatches = collectDetections(aliasSample, profile, regexes, {
+        priorityWeights: {
+            action: 3,
+        },
+    }).map(match => match.name);
+
+    assert.ok(primaryMatches.includes('Akiyama Ren'), 'primary name mention should be detected');
+    assert.ok(aliasMatches.includes('Ren'), 'alias mention should be detected');
+});
+
 test("compileProfileRegexes signals when all patterns are filtered out", () => {
     const profile = {
         patterns: ["Kotori", "Reine"],

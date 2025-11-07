@@ -33,7 +33,16 @@ import {
     summarizeDetections,
     summarizeSkipReasonsForReport,
 } from "./src/report-utils.js";
-import { loadProfiles, normalizeProfile, normalizeMappingEntry, mappingHasIdentity, prepareMappingsForSave } from "./profile-utils.js";
+import {
+    loadProfiles,
+    normalizeProfile,
+    normalizeMappingEntry,
+    mappingHasIdentity,
+    prepareMappingsForSave,
+    normalizePatternSlot,
+    preparePatternSlotsForSave,
+    flattenPatternSlots,
+} from "./profile-utils.js";
 
 const extensionName = "SillyTavern-CostumeSwitch-Testing";
 const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
@@ -289,6 +298,7 @@ const WORD_CHAR_REGEX = /[\\p{L}\\p{M}\\p{N}]/u;
 // DEFAULT SETTINGS
 // ======================================================================
 const PROFILE_DEFAULTS = {
+    patternSlots: [],
     patterns: [],
     ignorePatterns: [],
     vetoPatterns: ["OOC:", "(OOC)"],
@@ -398,10 +408,12 @@ const state = {
         lastNoticeAt: new Map(),
     },
     draftMappingIds: new Set(),
+    draftPatternIds: new Set(),
     focusLockNotice: createFocusLockNotice(),
 };
 
 let nextOutfitCardId = 1;
+let nextPatternSlotId = 1;
 
 function ensureMappingCardId(mapping) {
     if (!mapping || typeof mapping !== "object") {
@@ -418,6 +430,79 @@ function ensureMappingCardId(mapping) {
     }
 
     return mapping.__cardId;
+}
+
+function ensurePatternSlotId(slot) {
+    if (!slot || typeof slot !== "object") {
+        return null;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(slot, "__slotId")) {
+        const id = `cs-pattern-slot-${Date.now()}-${nextPatternSlotId++}`;
+        Object.defineProperty(slot, "__slotId", {
+            value: id,
+            enumerable: false,
+            configurable: true,
+        });
+    }
+
+    return slot.__slotId;
+}
+
+function collectProfilePatternList(profile) {
+    const result = [];
+    const seen = new Set();
+
+    const add = (value) => {
+        const trimmed = String(value ?? "").trim();
+        if (!trimmed || seen.has(trimmed)) {
+            return;
+        }
+        seen.add(trimmed);
+        result.push(trimmed);
+    };
+
+    if (profile && Array.isArray(profile.patternSlots)) {
+        flattenPatternSlots(profile.patternSlots).forEach(add);
+    }
+
+    if (profile && Array.isArray(profile.patterns)) {
+        profile.patterns.forEach(add);
+    }
+
+    return result;
+}
+
+function gatherSlotPatternList(slot) {
+    if (!slot) {
+        return [];
+    }
+
+    const normalized = normalizePatternSlot(slot);
+    const values = [];
+    if (normalized.name) {
+        values.push(normalized.name);
+    }
+    if (Array.isArray(normalized.aliases)) {
+        values.push(...normalized.aliases);
+    }
+    if (Array.isArray(normalized.patterns)) {
+        values.push(...normalized.patterns);
+    }
+    return values.map((value) => String(value ?? "").trim()).filter(Boolean);
+}
+
+function updateProfilePatternCache(profile) {
+    if (!profile || typeof profile !== "object") {
+        return [];
+    }
+
+    if (!Array.isArray(profile.patternSlots)) {
+        profile.patternSlots = [];
+    }
+
+    profile.patterns = flattenPatternSlots(profile.patternSlots);
+    return profile.patterns;
 }
 
 function markMappingForInitialCollapse(mapping) {
@@ -1772,7 +1857,7 @@ async function issueCostumeForName(name, opts = {}) {
 // UI MANAGEMENT
 // ======================================================================
 const uiMapping = {
-    patterns: { selector: '#cs-patterns', type: 'textarea' },
+    patterns: { selector: '#cs-patterns', type: 'patternEditor' },
     ignorePatterns: { selector: '#cs-ignore-patterns', type: 'textarea' },
     vetoPatterns: { selector: '#cs-veto-patterns', type: 'textarea' },
     defaultCostume: { selector: '#cs-default', type: 'text' },
@@ -2141,7 +2226,8 @@ function updateFocusLockUI() {
     const lockSelect = $("#cs-focus-lock-select");
     const lockToggle = $("#cs-focus-lock-toggle");
     lockSelect.empty().append($('<option>', { value: '', text: 'None' }));
-    (profile.patterns || []).forEach(name => {
+    const patternNames = collectProfilePatternList(profile);
+    patternNames.forEach(name => {
         const cleanName = normalizeCostumeName(name);
         if (cleanName) lockSelect.append($('<option>', { value: cleanName, text: cleanName }));
     });
@@ -2171,6 +2257,9 @@ function syncProfileFieldsToUI(profile, fields = []) {
                 break;
             case 'csvTextarea':
                 field.val(Array.isArray(value) ? value.join(', ') : '');
+                break;
+            case 'patternEditor':
+                renderPatternEditor(profile);
                 break;
             default:
                 field.val(value ?? '');
@@ -2216,6 +2305,7 @@ function loadProfile(profileName) {
             case 'checkbox': $(selector).prop('checked', !!value); break;
             case 'textarea': $(selector).val((value || []).join('\n')); break;
             case 'csvTextarea': $(selector).val((value || []).join(', ')); break;
+            case 'patternEditor': renderPatternEditor(profile); break;
             default: $(selector).val(value); break;
         }
     }
@@ -2229,8 +2319,12 @@ function loadProfile(profileName) {
 
 function saveCurrentProfileData() {
     const profileData = {};
+    const activeProfile = getActiveProfile();
     for (const key in uiMapping) {
         const { selector, type } = uiMapping[key];
+        if (type === 'patternEditor') {
+            continue;
+        }
         const field = $(selector);
         if (!field.length) {
             const fallback = PROFILE_DEFAULTS[key];
@@ -2270,7 +2364,11 @@ function saveCurrentProfileData() {
         }
         profileData[key] = value;
     }
-    const activeProfile = getActiveProfile();
+    const slotSource = Array.isArray(activeProfile?.patternSlots) ? activeProfile.patternSlots : [];
+    const draftPatternIds = state?.draftPatternIds instanceof Set ? state.draftPatternIds : new Set();
+    const preparedSlots = preparePatternSlotsForSave(slotSource, draftPatternIds);
+    profileData.patternSlots = preparedSlots;
+    profileData.patterns = flattenPatternSlots(preparedSlots);
     const mappingSource = Array.isArray(activeProfile?.mappings) ? activeProfile.mappings : [];
     const draftIds = state?.draftMappingIds instanceof Set ? state.draftMappingIds : new Set();
     profileData.mappings = prepareMappingsForSave(mappingSource, draftIds);
@@ -2687,6 +2785,270 @@ function buildVariantFolderPath(mappingOrName, folderPath) {
     }
 
     return normalizedFolder;
+}
+
+function createPatternSlotCard(profile, slot, index) {
+    const normalized = profile?.patternSlots?.[index] === slot
+        ? slot
+        : normalizePatternSlot(slot);
+
+    if (profile && Array.isArray(profile.patternSlots)) {
+        profile.patternSlots[index] = normalized;
+    }
+
+    ensurePatternSlotId(normalized);
+    const slotId = normalized.__slotId || ensurePatternSlotId(normalized);
+
+    const card = $('<article>')
+        .addClass('cs-pattern-card')
+        .attr('data-idx', index)
+        .data('slot', normalized);
+
+    const header = $('<div>').addClass('cs-pattern-card-header');
+    const title = $('<div>').addClass('cs-pattern-card-title');
+    title.append($('<i>').addClass('fa-solid fa-user')); // Icon for visual cue
+    const titleText = $('<div>').addClass('cs-pattern-card-title-text');
+    const heading = $('<h4>');
+    const summary = $('<small>').addClass('cs-pattern-card-summary');
+    const folderSummary = $('<small>').addClass('cs-pattern-card-folder');
+    titleText.append(heading, summary, folderSummary);
+    title.append(titleText);
+    header.append(title);
+
+    const removeButton = $('<button>', {
+        type: 'button',
+        class: 'menu_button interactable cs-button-danger cs-pattern-remove-slot',
+    })
+        .attr('data-change-notice', 'Removing this character slot auto-saves your patterns.')
+        .attr('data-change-notice-key', `${slotId}-remove`)
+        .append($('<i>').addClass('fa-solid fa-trash-can'), $('<span>').text('Remove Slot'))
+        .on('click', () => {
+            if (!profile || !Array.isArray(profile.patternSlots)) {
+                return;
+            }
+            const buttonEl = removeButton[0];
+            const id = ensurePatternSlotId(normalized);
+            if (id && state?.draftPatternIds instanceof Set) {
+                state.draftPatternIds.delete(id);
+            }
+            profile.patternSlots.splice(index, 1);
+            updateProfilePatternCache(profile);
+            renderPatternEditor(profile);
+            scheduleProfileAutoSave({
+                reason: 'character patterns',
+                element: buttonEl,
+                requiresRecompile: true,
+                requiresFocusLockRefresh: true,
+                noticeKey: `${slotId}-remove`,
+            });
+        });
+    header.append(removeButton);
+    card.append(header);
+
+    const body = $('<div>').addClass('cs-pattern-card-body');
+    card.append(body);
+
+    const nameId = `cs-pattern-name-${slotId}`;
+    const nameField = $('<div>').addClass('cs-field')
+        .append($('<label>', { for: nameId, text: 'Character Name' }));
+    const nameInput = $('<input>', {
+        id: nameId,
+        type: 'text',
+        class: 'text_pole cs-pattern-name',
+        placeholder: 'Primary name used in chat…',
+    }).val(normalized.name || '');
+    nameField.append(nameInput);
+    body.append(nameField);
+
+    const aliasesId = `cs-pattern-aliases-${slotId}`;
+    const aliasField = $('<div>').addClass('cs-field')
+        .append($('<label>', { for: aliasesId, text: 'Alternate Patterns' }));
+    const aliasTextarea = $('<textarea>', {
+        id: aliasesId,
+        rows: 3,
+        class: 'text_pole cs-pattern-aliases',
+        placeholder: 'Nickname\nCodename\n/Regex Pattern/',
+    }).val(Array.isArray(normalized.aliases) ? normalized.aliases.join('\n') : '');
+    aliasField.append(aliasTextarea);
+    aliasField.append($('<small>').text('One entry per line. Supports literal names or /regex/.'));
+    body.append(aliasField);
+
+    const folderId = `cs-pattern-folder-${slotId}`;
+    const folderField = $('<div>').addClass('cs-field')
+        .append($('<label>', { for: folderId, text: 'Default Folder' }));
+    const folderRow = $('<div>').addClass('cs-pattern-folder-row');
+    const folderInput = $('<input>', {
+        id: folderId,
+        type: 'text',
+        class: 'text_pole cs-pattern-folder',
+        placeholder: 'Enter folder path…',
+    }).val(normalized.folder || '');
+    const folderPicker = $('<input>', { type: 'file', hidden: true });
+    folderPicker.attr({ webkitdirectory: 'true', directory: 'true', multiple: 'true' });
+    const folderButton = $('<button>', {
+        type: 'button',
+        class: 'menu_button interactable cs-pattern-pick-folder',
+    })
+        .append($('<i>').addClass('fa-solid fa-folder-open'), $('<span>').text('Pick Folder'))
+        .on('click', () => folderPicker.trigger('click'));
+    folderPicker.on('change', function() {
+        const folderPath = extractDirectoryFromFileList(this.files || []);
+        if (folderPath) {
+            folderInput.val(folderPath);
+            folderInput.trigger('input');
+        }
+        $(this).val('');
+    });
+    folderRow.append(folderInput, folderButton, folderPicker);
+    folderField.append(folderRow);
+    folderField.append($('<small>').text('Optional path override when this slot is detected.'));
+    body.append(folderField);
+
+    const updateHeader = () => {
+        const patterns = gatherSlotPatternList(normalized);
+        const seen = new Set();
+        const unique = patterns.filter((entry) => {
+            if (seen.has(entry)) {
+                return false;
+            }
+            seen.add(entry);
+            return true;
+        });
+        const displayName = String(normalized.name ?? '').trim();
+        if (displayName) {
+            heading.text(displayName);
+        } else {
+            heading.text(`Character Slot ${index + 1}`);
+        }
+        if (unique.length) {
+            summary.text(`Patterns: ${unique.join(', ')}`);
+        } else {
+            summary.text('Patterns: (none)');
+        }
+        const folderValue = String(normalized.folder ?? '').trim();
+        if (folderValue) {
+            folderSummary.text(`Folder: ${folderValue}`);
+        } else {
+            folderSummary.text('Folder: (inherit mapping or default)');
+        }
+    };
+
+    const commitAliasInput = (value) => {
+        const entries = String(value ?? '')
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean);
+        const unique = Array.from(new Set(entries));
+        normalized.aliases = unique;
+        updateProfilePatternCache(profile);
+        updateHeader();
+    };
+
+    nameInput.on('input', (event) => {
+        normalized.name = event.target.value;
+        updateProfilePatternCache(profile);
+        updateHeader();
+        scheduleProfileAutoSave({
+            key: 'patterns',
+            element: event.currentTarget,
+            requiresRecompile: true,
+            requiresFocusLockRefresh: true,
+        });
+    });
+
+    aliasTextarea.on('input', (event) => {
+        commitAliasInput(event.target.value);
+        scheduleProfileAutoSave({
+            key: 'patterns',
+            element: event.currentTarget,
+            requiresRecompile: true,
+            requiresFocusLockRefresh: true,
+        });
+    });
+
+    folderInput.on('input', (event) => {
+        normalized.folder = event.target.value.trim();
+        updateHeader();
+        scheduleProfileAutoSave({
+            reason: 'character patterns',
+            element: event.currentTarget,
+        });
+    });
+
+    updateHeader();
+    return card;
+}
+
+function renderPatternEditor(profile) {
+    const editor = $('#cs-patterns');
+    if (!editor.length) {
+        return;
+    }
+
+    editor.attr('aria-busy', 'true');
+    const list = editor.find('#cs-pattern-slot-list');
+    const addButton = editor.find('#cs-pattern-add-slot');
+
+    const isEditable = profile && typeof profile === 'object';
+    const workingProfile = isEditable && profile ? profile : { patternSlots: [] };
+
+    const slots = Array.isArray(workingProfile.patternSlots)
+        ? workingProfile.patternSlots.map((slot, index) => {
+            const normalized = normalizePatternSlot(slot);
+            ensurePatternSlotId(normalized);
+            if (isEditable && Array.isArray(profile.patternSlots)) {
+                profile.patternSlots[index] = normalized;
+            }
+            return normalized;
+        })
+        : [];
+
+    if (isEditable && Array.isArray(profile.patternSlots)) {
+        profile.patternSlots = slots;
+    } else {
+        workingProfile.patternSlots = slots;
+    }
+
+    updateProfilePatternCache(isEditable ? profile : workingProfile);
+
+    list.empty();
+    if (slots.length === 0) {
+        const emptyText = list.data('emptyText') || list.attr('data-empty-text') || 'No characters configured yet.';
+        list.append($('<div>').addClass('cs-pattern-empty').text(emptyText));
+    } else {
+        slots.forEach((slot, idx) => {
+            list.append(createPatternSlotCard(profile, slot, idx));
+        });
+    }
+
+    addButton.prop('disabled', !isEditable);
+    addButton.off('click').on('click', () => {
+        if (!isEditable || !profile || !Array.isArray(profile.patternSlots)) {
+            return;
+        }
+        const buttonEl = addButton[0];
+        const newSlot = normalizePatternSlot({ name: '', aliases: [] });
+        ensurePatternSlotId(newSlot);
+        profile.patternSlots.push(newSlot);
+        if (state?.draftPatternIds instanceof Set && newSlot.__slotId) {
+            state.draftPatternIds.add(newSlot.__slotId);
+        }
+        updateProfilePatternCache(profile);
+        renderPatternEditor(profile);
+        const newCard = $('#cs-pattern-slot-list .cs-pattern-card').last();
+        const nameInput = newCard.find('.cs-pattern-name');
+        if (nameInput.length) {
+            nameInput.trigger('focus');
+        }
+        scheduleProfileAutoSave({
+            reason: 'character patterns',
+            element: buttonEl,
+            noticeKey: buttonEl.dataset.changeNoticeKey || 'cs-pattern-add-slot',
+        });
+    });
+
+    editor.attr('aria-busy', 'false');
+    updateFocusLockUI();
 }
 
 function createOutfitVariantElement(profile, mapping, mappingIdx, variant, variantIndex) {
@@ -3218,9 +3580,12 @@ function renderOutfitLab(profile) {
 
 function renderMappings(profile) {
     if (!profile || typeof profile !== 'object') {
+        renderPatternEditor(null);
         renderOutfitLab({ mappings: [] });
         return;
     }
+
+    renderPatternEditor(profile);
 
     if (!Array.isArray(profile.mappings)) {
         profile.mappings = [];
@@ -5207,7 +5572,13 @@ function registerCommands() {
         const { args: cleanArgs, persist } = parseCommandFlags(args || []);
         const name = String(cleanArgs?.join(' ') ?? '').trim();
         if (profile && name) {
-            profile.patterns.push(name);
+            if (!Array.isArray(profile.patternSlots)) {
+                profile.patternSlots = [];
+            }
+            const newSlot = normalizePatternSlot({ name });
+            ensurePatternSlotId(newSlot);
+            profile.patternSlots.push(newSlot);
+            updateProfilePatternCache(profile);
             recompileRegexes();
             applyCommandProfileUpdates(profile, ['patterns'], { persist });
             updateFocusLockUI();
@@ -5669,6 +6040,7 @@ const resetGlobalState = () => {
         currentGenerationKey: null,
         messageKeyQueue: [],
         draftMappingIds: new Set(),
+        draftPatternIds: new Set(),
         focusLockNotice: createFocusLockNotice(),
     });
     clearSessionTopCharacters();
