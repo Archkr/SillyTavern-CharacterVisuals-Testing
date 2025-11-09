@@ -4205,6 +4205,8 @@ const RELEVANT_SKIP_CODES = new Set([
     'failed-trigger-cooldown',
 ]);
 
+const MAX_RECENT_DECISION_EVENTS = 25;
+
 function recordLastVetoMatch(match, { source = 'live', persist = true } = {}) {
     const phrase = String(match ?? '').trim() || '(unknown veto phrase)';
     const entry = { phrase, source, at: Date.now() };
@@ -4261,6 +4263,47 @@ function updateSkipReasonSummaryDisplay(eventsOverride = null) {
     el.setAttribute('title', tooltip);
 }
 
+function overwriteRecentDecisionEvents(messageKey, events) {
+    const normalizedKey = normalizeMessageKey(messageKey);
+    const prepared = [];
+    if (normalizedKey && Array.isArray(events)) {
+        events.forEach((event) => {
+            const clone = cloneDecisionEvent(event);
+            if (!clone) {
+                return;
+            }
+            clone.messageKey = normalizedKey;
+            if (!Number.isFinite(clone.timestamp)) {
+                clone.timestamp = Date.now();
+            }
+            if (typeof clone.name === "string" && clone.name.trim()) {
+                clone.name = clone.name.trim();
+            }
+            const normalizedName = normalizeRosterKey(clone.normalized || clone.name);
+            if (normalizedName) {
+                clone.normalized = normalizedName;
+            } else {
+                delete clone.normalized;
+            }
+            prepared.push(clone);
+        });
+    }
+
+    const limited = prepared.length > MAX_RECENT_DECISION_EVENTS
+        ? prepared.slice(-MAX_RECENT_DECISION_EVENTS)
+        : prepared;
+
+    state.recentDecisionEvents = limited;
+
+    const session = ensureSessionData();
+    if (session) {
+        session.recentDecisionEvents = limited.map(event => cloneDecisionEvent(event));
+    }
+
+    updateSkipReasonSummaryDisplay();
+    return limited;
+}
+
 function recordDecisionEvent(event) {
     if (!event || typeof event !== 'object') {
         return;
@@ -4285,13 +4328,12 @@ function recordDecisionEvent(event) {
             entry.messageKey = normalizeMessageKey(state.currentGenerationKey);
         }
     }
-    const maxEntries = 25;
     if (!Array.isArray(state.recentDecisionEvents)) {
         state.recentDecisionEvents = [];
     }
     state.recentDecisionEvents.push(entry);
-    if (state.recentDecisionEvents.length > maxEntries) {
-        state.recentDecisionEvents.splice(0, state.recentDecisionEvents.length - maxEntries);
+    if (state.recentDecisionEvents.length > MAX_RECENT_DECISION_EVENTS) {
+        state.recentDecisionEvents.splice(0, state.recentDecisionEvents.length - MAX_RECENT_DECISION_EVENTS);
     }
 
     const session = ensureSessionData();
@@ -4300,8 +4342,8 @@ function recordDecisionEvent(event) {
             session.recentDecisionEvents = [];
         }
         session.recentDecisionEvents.push(entry);
-        if (session.recentDecisionEvents.length > maxEntries) {
-            session.recentDecisionEvents.splice(0, session.recentDecisionEvents.length - maxEntries);
+        if (session.recentDecisionEvents.length > MAX_RECENT_DECISION_EVENTS) {
+            session.recentDecisionEvents.splice(0, session.recentDecisionEvents.length - MAX_RECENT_DECISION_EVENTS);
         }
     }
 
@@ -4972,11 +5014,17 @@ function simulateTesterStream(combined, profile, bufKey) {
 
     const settings = getSettings();
     const rosterDisplayNames = new Map();
+    const normalizedTesterKey = normalizeMessageKey(bufKey) || String(bufKey ?? "").trim() || "tester";
+    const testerMessageKey = normalizedTesterKey.startsWith("tester:")
+        ? normalizedTesterKey
+        : `tester:${normalizedTesterKey}`;
     const finalizeResult = (result) => {
         const rosterSnapshot = Array.isArray(result?.finalState?.sceneRoster)
             ? result.finalState.sceneRoster
             : Array.from(msgState?.sceneRoster || []);
-        replaceLiveTesterOutputs(result?.events || events, {
+        const eventList = Array.isArray(result?.events) ? result.events : events;
+        overwriteRecentDecisionEvents(testerMessageKey, eventList);
+        replaceLiveTesterOutputs(eventList, {
             roster: rosterSnapshot,
             displayNames: rosterDisplayNames,
         });
@@ -6474,6 +6522,8 @@ function restoreSceneOutcomeForMessage(message, { immediateRender = true } = {})
         }).filter(Boolean)
         : [];
 
+    overwriteRecentDecisionEvents(messageKey, events);
+
     if (!(state.messageStats instanceof Map)) {
         state.messageStats = new Map();
     }
@@ -7225,6 +7275,7 @@ export {
     buildVariantFolderPath,
     handleStream,
     remapMessageKey,
+    restoreSceneOutcomeForMessage,
 };
 
 async function mountScenePanelTemplate() {

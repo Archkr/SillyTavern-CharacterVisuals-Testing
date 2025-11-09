@@ -65,6 +65,7 @@ function setupProfile(overrides = {}) {
     extensionSettingsStore[extensionName] = {
         ...baseSettings,
         profiles: { Test: profile },
+        session: {},
     };
     const compiled = compileProfileRegexes(profile, {
         unicodeWordPattern: "[\\\\p{L}\\\\p{M}\\\\p{N}_]",
@@ -170,4 +171,29 @@ test("simulateTesterStream records per-character tester outputs", () => {
     assert.ok(kotoriEntry, "expected Kotori to appear in tester outputs");
     assert.ok(kotoriEntry.summary.switches + kotoriEntry.summary.skips + kotoriEntry.summary.vetoes > 0,
         "expected Kotori tester summary to track events");
+});
+
+test("simulateTesterStream syncs tester events into the shared decision log", () => {
+    const profile = setupProfile();
+    const bufKey = "tester-shared-log";
+    const msgState = createMessageState(profile);
+    state.perMessageStates = new Map([[bufKey, msgState]]);
+    state.perMessageBuffers = new Map([[bufKey, ""]]);
+
+    state.recentDecisionEvents = [{ type: "switch", messageKey: "m1", name: "Origami" }];
+
+    const text = "Kotori waves enthusiastically before Shido responds.";
+    simulateTesterStream(text, profile, bufKey);
+
+    const logEvents = Array.isArray(state.recentDecisionEvents) ? state.recentDecisionEvents : [];
+    assert.ok(logEvents.length > 0, "expected tester events to populate the recent decision log");
+    assert.ok(logEvents.every(event => typeof event.messageKey === "string" && event.messageKey.startsWith("tester:")),
+        "tester events should be keyed to the tester namespace");
+
+    const session = extensionSettingsStore[extensionName].session;
+    assert.ok(Array.isArray(session.recentDecisionEvents), "session cache should mirror tester decision events");
+    assert.equal(session.recentDecisionEvents.length, logEvents.length,
+        "session log should match the in-memory tester log length");
+    assert.ok(session.recentDecisionEvents.every(event => event.messageKey.startsWith("tester:")),
+        "session tester log should carry the tester message key prefix");
 });
