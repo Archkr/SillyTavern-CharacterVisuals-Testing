@@ -1949,12 +1949,9 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
 }
 
 @media (min-width: 1401px) {
-    body:has(#cs-scene-panel) #sheld {
-        margin-right: calc(var(--cs-scene-panel-width) + var(--cs-scene-panel-gap));
-    }
-
+    body:has(#cs-scene-panel) #sheld,
     body:has(#cs-scene-panel[data-cs-collapsed="true"]) #sheld {
-        margin-right: calc(var(--cs-scene-panel-collapsed-width) + var(--cs-scene-panel-gap));
+        margin-right: 0;
     }
 }
 
