@@ -7,6 +7,10 @@ await register(new URL("./module-mock-loader.js", import.meta.url));
 const extensionSettingsStore = globalThis.__extensionSettingsStore || (globalThis.__extensionSettingsStore = {});
 
 const { simulateTesterStream, state, extensionName } = await import("../index.js");
+const {
+    getLiveTesterOutputsSnapshot,
+    clearLiveTesterOutputs,
+} = await import("../src/core/state.js");
 const { compileProfileRegexes } = await import("../src/detector-core.js");
 
 const baseSettings = {
@@ -144,4 +148,26 @@ test("first-token pronoun yields a detection when falling back to the pending su
     assert.ok(pronounEvents.length > 0, "expected a pronoun detection for the leading token");
     assert.equal(pronounEvents[0].charIndex, 0, "pronoun detection should align with the first token");
     assert.equal(msgState.pendingSubject, "Kotori", "pending subject should persist until a non-pronoun confirmation occurs");
+});
+
+test("simulateTesterStream records per-character tester outputs", () => {
+    const profile = setupProfile();
+    const bufKey = "tester-output";
+    const msgState = createMessageState(profile);
+    state.perMessageStates = new Map([[bufKey, msgState]]);
+    state.perMessageBuffers = new Map([[bufKey, ""]]);
+
+    clearLiveTesterOutputs();
+
+    const text = "Kotori smiles and waves. Shido nods.";
+    const result = simulateTesterStream(text, profile, bufKey);
+
+    assert.ok(result.events.length > 0, "expected tester events to be recorded");
+
+    const snapshot = getLiveTesterOutputsSnapshot();
+    const entries = snapshot.entries || [];
+    const kotoriEntry = entries.find(entry => entry.normalized === "kotori");
+    assert.ok(kotoriEntry, "expected Kotori to appear in tester outputs");
+    assert.ok(kotoriEntry.summary.switches + kotoriEntry.summary.skips + kotoriEntry.summary.vetoes > 0,
+        "expected Kotori tester summary to track events");
 });

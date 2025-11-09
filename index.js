@@ -34,6 +34,12 @@ import {
     summarizeSkipReasonsForReport,
 } from "./src/report-utils.js";
 import {
+    applySceneRosterUpdate,
+    resetSceneState,
+    replaceLiveTesterOutputs,
+    clearLiveTesterOutputs,
+} from "./src/core/state.js";
+import {
     loadProfiles,
     normalizeProfile,
     normalizeMappingEntry,
@@ -377,7 +383,23 @@ const DEFAULTS = {
     scorePresets: structuredClone(DEFAULT_SCORE_PRESETS),
     activeScorePreset: 'Balanced Baseline',
     focusLock: { character: null },
+    scenePanel: {
+        autoOpenOnStream: true,
+        showRosterAvatars: true,
+    },
 };
+
+function ensureScenePanelSettings(settings) {
+    if (!settings || typeof settings !== "object") {
+        return { ...DEFAULTS.scenePanel };
+    }
+    if (typeof settings.scenePanel !== "object" || settings.scenePanel === null) {
+        settings.scenePanel = { ...DEFAULTS.scenePanel };
+    } else {
+        settings.scenePanel = Object.assign({}, DEFAULTS.scenePanel, settings.scenePanel);
+    }
+    return settings.scenePanel;
+}
 
 // ======================================================================
 // GLOBAL STATE
@@ -2348,6 +2370,9 @@ function loadProfile(profileName) {
     }
     $("#cs-profile-name").val('').attr('placeholder', `Enter a name... (current: ${profileName})`);
     $("#cs-enable").prop('checked', !!settings.enabled);
+    const scenePanelSettings = ensureScenePanelSettings(settings);
+    $("#cs-scene-auto-open").prop('checked', !!scenePanelSettings.autoOpenOnStream);
+    $("#cs-scene-show-avatars").prop('checked', !!scenePanelSettings.showRosterAvatars);
     for (const key in uiMapping) {
         const { selector, type } = uiMapping[key];
         const value = profile[key] ?? PROFILE_DEFAULTS[key];
@@ -4500,32 +4525,45 @@ function simulateTesterStream(combined, profile, bufKey) {
     const events = [];
     const msgState = state.perMessageStates.get(bufKey);
     if (!msgState) {
+        replaceLiveTesterOutputs([], { roster: [] });
         return { events, finalState: null, rosterTimeline: [], rosterWarnings: [] };
     }
 
     const settings = getSettings();
+    const rosterDisplayNames = new Map();
+    const finalizeResult = (result) => {
+        const rosterSnapshot = Array.isArray(result?.finalState?.sceneRoster)
+            ? result.finalState.sceneRoster
+            : Array.from(msgState?.sceneRoster || []);
+        replaceLiveTesterOutputs(result?.events || events, {
+            roster: rosterSnapshot,
+            displayNames: rosterDisplayNames,
+        });
+        return result;
+    };
+
     const lockedName = String(settings?.focusLock?.character ?? "").trim();
     if (lockedName) {
         const event = buildFocusLockSkipEvent(lockedName);
         events.push(event);
-        return {
+        return finalizeResult({
             events,
             finalState: buildSimulationFinalState(msgState),
             rosterTimeline: [],
             rosterWarnings: [],
-        };
+        });
     }
 
     const effectivePatterns = Array.isArray(state.compiledRegexes?.effectivePatterns)
         ? state.compiledRegexes.effectivePatterns
         : [];
     if (!effectivePatterns.length) {
-        return {
+        return finalizeResult({
             events,
             finalState: null,
             rosterTimeline: [],
             rosterWarnings: [{ type: "no-patterns", message: NO_EFFECTIVE_PATTERNS_MESSAGE }],
-        };
+        });
     }
 
     const simulationState = {
@@ -4540,10 +4578,10 @@ function simulateTesterStream(combined, profile, bufKey) {
     const maxBuffer = resolveMaxBufferChars(profile);
     const rosterTTL = profile.sceneRosterTTL ?? PROFILE_DEFAULTS.sceneRosterTTL;
     const repeatSuppress = Number(profile.repeatSuppressMs) || 0;
-    let buffer = '';
+    let buffer = "";
     const rosterTimeline = [];
     const rosterWarnings = [];
-    const rosterDisplayNames = new Map();
+
     for (let i = 0; i < combined.length; i++) {
         const appended = buffer + combined[i];
         buffer = appended.slice(-maxBuffer);
@@ -4583,7 +4621,9 @@ function simulateTesterStream(combined, profile, bufKey) {
         }
 
         const bestMatch = findBestMatch(buffer, null, matchOptions);
-        if (!bestMatch) continue;
+        if (!bestMatch) {
+            continue;
+        }
 
         const absoluteIndex = Number.isFinite(bestMatch.matchIndex)
             ? bufferOffset + bestMatch.matchIndex
@@ -4593,7 +4633,7 @@ function simulateTesterStream(combined, profile, bufKey) {
         msgState.processedLength = Math.max(msgState.processedLength || 0, absoluteIndex + 1);
 
         if (profile.enableSceneRoster) {
-            const normalized = String(bestMatch.name || '').toLowerCase();
+            const normalized = String(bestMatch.name || "").toLowerCase();
             const wasPresent = normalized ? msgState.sceneRoster.has(normalized) : false;
             if (normalized) {
                 msgState.sceneRoster.add(normalized);
@@ -4616,8 +4656,8 @@ function simulateTesterStream(combined, profile, bufKey) {
         }
 
         const virtualNow = absoluteIndex * 50;
-        if (msgState.lastAcceptedName?.toLowerCase() === bestMatch.name.toLowerCase() &&
-            (virtualNow - msgState.lastAcceptedTs < repeatSuppress)) {
+        if (msgState.lastAcceptedName?.toLowerCase() === bestMatch.name.toLowerCase()
+            && (virtualNow - msgState.lastAcceptedTs < repeatSuppress)) {
             events.push({ type: 'skipped', name: bestMatch.name, matchKind: bestMatch.matchKind, reason: 'repeat-suppression', charIndex: absoluteIndex });
             continue;
         }
@@ -4674,6 +4714,25 @@ function simulateTesterStream(combined, profile, bufKey) {
                 charIndex: absoluteIndex,
             });
         }
+
+        if (state.currentGenerationKey && state.currentGenerationKey === bufKey) {
+            const displayNames = new Map();
+            if (bestMatch.name) {
+                displayNames.set(bestMatch.name.toLowerCase(), bestMatch.name);
+            }
+            applySceneRosterUpdate({
+                key: bufKey,
+                messageId: extractMessageIdFromKey(bufKey),
+                roster: Array.from(msgState.sceneRoster || []),
+                displayNames,
+                lastMatch: {
+                    name: bestMatch.name,
+                    matchKind,
+                    charIndex: absoluteIndex,
+                },
+                updatedAt: now,
+            });
+        }
     }
 
     const finalState = buildSimulationFinalState(msgState);
@@ -4686,8 +4745,7 @@ function simulateTesterStream(combined, profile, bufKey) {
                 type: 'ttl-expiry',
                 turnsRemaining: Math.max(0, turnsRemaining),
                 names,
-                message: `Scene roster TTL of ${rosterTTL} will clear ${names.join(', ')} before the next message. Consider increas` +
-                    'ing the TTL for longer conversations.',
+                message: `Scene roster TTL of ${rosterTTL} will clear ${names.join(', ')} before the next message. Consider increasing the TTL for longer conversations.`,
             });
             rosterTimeline.push({
                 type: 'expiry-warning',
@@ -4698,8 +4756,9 @@ function simulateTesterStream(combined, profile, bufKey) {
         }
     }
 
-    return { events, finalState, rosterTimeline, rosterWarnings };
+    return finalizeResult({ events, finalState, rosterTimeline, rosterWarnings });
 }
+
 
 function renderTesterStream(eventList, events) {
     eventList.empty();
@@ -4748,6 +4807,7 @@ function testRegexPattern() {
     renderTesterScoreBreakdown(null);
     renderTesterRosterTimeline(null, null);
     renderCoverageDiagnostics(null);
+    clearLiveTesterOutputs();
     const text = $("#cs-regex-test-input").val();
     if (!text) {
         $("#cs-test-all-detections, #cs-test-winner-list").html('<li class="cs-tester-list-placeholder">Enter text to test.</li>');
@@ -4805,6 +4865,7 @@ function testRegexPattern() {
         renderTesterScoreBreakdown([]);
         renderTesterRosterTimeline([], []);
         renderCoverageDiagnostics(coverage);
+        replaceLiveTesterOutputs(vetoEvents, { roster: [] });
         const skipSummary = summarizeSkipReasonsForReport(vetoEvents);
         state.lastTesterReport = { ...reportBase, vetoed: true, vetoMatch, events: vetoEvents, matches: [], topCharacters: [], rosterTimeline: [], rosterWarnings: [], scoreDetails: [], coverage, skipSummary };
         updateTesterTopCharactersDisplay([]);
@@ -4889,6 +4950,7 @@ function testRegexPattern() {
 
 function wireUI() {
     const settings = getSettings();
+    ensureScenePanelSettings(settings);
     initTabNavigation();
     Object.entries(uiMapping).forEach(([key, mapping]) => {
         const selector = mapping?.selector;
@@ -4928,6 +4990,24 @@ function wireUI() {
         announceAutoSaveIntent(this, null, `Extension will ${enabled ? 'enable' : 'disable'} immediately.`, 'cs-enable');
         settings.enabled = enabled;
         persistSettings('Extension ' + (enabled ? 'Enabled' : 'Disabled'), 'info');
+    });
+    $(document).on('change', '#cs-scene-auto-open', function() {
+        const autoOpen = $(this).prop('checked');
+        const notice = this?.dataset?.changeNotice
+            || `Scene panel will ${autoOpen ? 'auto-open' : 'remain collapsed'} when streaming starts.`;
+        announceAutoSaveIntent(this, null, notice, 'cs-scene-auto-open');
+        const scenePanelSettings = ensureScenePanelSettings(settings);
+        scenePanelSettings.autoOpenOnStream = autoOpen;
+        persistSettings(autoOpen ? 'Scene panel auto-open enabled.' : 'Scene panel auto-open disabled.', 'info');
+    });
+    $(document).on('change', '#cs-scene-show-avatars', function() {
+        const showAvatars = $(this).prop('checked');
+        const notice = this?.dataset?.changeNotice
+            || `Roster avatars will ${showAvatars ? 'be shown' : 'be hidden'} in the scene panel.`;
+        announceAutoSaveIntent(this, null, notice, 'cs-scene-show-avatars');
+        const scenePanelSettings = ensureScenePanelSettings(settings);
+        scenePanelSettings.showRosterAvatars = showAvatars;
+        persistSettings(showAvatars ? 'Roster avatars enabled.' : 'Roster avatars hidden.', 'info');
     });
     $(document).on('click', '#cs-save', () => {
         const button = document.getElementById('cs-save');
@@ -5837,6 +5917,15 @@ function createMessageState(profile, bufKey) {
     state.perMessageBuffers.set(bufKey, '');
     trackMessageKey(bufKey);
 
+    if (state.currentGenerationKey && state.currentGenerationKey === bufKey) {
+        applySceneRosterUpdate({
+            key: bufKey,
+            messageId: extractMessageIdFromKey(bufKey),
+            roster: Array.from(newState.sceneRoster || []),
+            updatedAt: Date.now(),
+        });
+    }
+
     return newState;
 }
 
@@ -6091,6 +6180,8 @@ const handleMessageRendered = (...args) => {
 };
 
 const resetGlobalState = () => {
+    resetSceneState();
+    clearLiveTesterOutputs();
     if (state.statusTimer) {
         clearTimeout(state.statusTimer);
         state.statusTimer = null;
@@ -6284,6 +6375,7 @@ function getSettingsObj() {
     
     storeSource[extensionName] = Object.assign({}, structuredClone(DEFAULTS), storeSource[extensionName]);
     storeSource[extensionName].profiles = loadProfiles(storeSource[extensionName].profiles, PROFILE_DEFAULTS);
+    ensureScenePanelSettings(storeSource[extensionName]);
 
     ensureScorePresetStructure(storeSource[extensionName]);
 
