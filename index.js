@@ -55,7 +55,8 @@ import {
 } from "./src/ui/scenePanelState.js";
 
 const extensionName = "SillyTavern-CostumeSwitch-Testing";
-const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
+const extensionTemplateNamespace = `third-party/${extensionName}`;
+const extensionFolderPath = `scripts/extensions/${extensionTemplateNamespace}`;
 const logPrefix = "[CostumeSwitch]";
 const NO_EFFECTIVE_PATTERNS_MESSAGE = "All detection patterns were filtered out by ignored names. No detectors can run until you restore at least one allowed pattern.";
 const FOCUS_LOCK_NOTICE_INTERVAL = 2500;
@@ -6157,11 +6158,11 @@ async function mountScenePanelTemplate() {
 
         let templateHtml;
         try {
-            templateHtml = await renderExtensionTemplateAsync(extensionName, "ui/templates/scenePanel");
+            templateHtml = await renderExtensionTemplateAsync(extensionTemplateNamespace, "ui/templates/scenePanel");
         } catch (primaryError) {
             console.warn(`${logPrefix} Scene panel template missing at ui/templates/scenePanel.html, attempting fallback.`, primaryError);
             try {
-                templateHtml = await renderExtensionTemplateAsync(extensionName, "src/ui/templates/scenePanel");
+                templateHtml = await renderExtensionTemplateAsync(extensionTemplateNamespace, "src/ui/templates/scenePanel");
             } catch (fallbackError) {
                 console.error(`${logPrefix} Failed to load scene panel template from both primary and fallback locations.`, fallbackError);
                 return;
