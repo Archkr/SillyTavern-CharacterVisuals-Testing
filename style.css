@@ -1948,13 +1948,6 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
     border: 0 !important;
 }
 
-@media (min-width: 1401px) {
-    body:has(#cs-scene-panel) #sheld,
-    body:has(#cs-scene-panel[data-cs-collapsed="true"]) #sheld {
-        margin-right: 0;
-    }
-}
-
 @media (max-width: 1400px) {
     .cs-scene-panel {
         left: auto;
@@ -1973,10 +1966,6 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
         border-radius: 12px;
     }
 
-    body:has(#cs-scene-panel) #sheld,
-    body:has(#cs-scene-panel[data-cs-collapsed="true"]) #sheld {
-        margin-right: 0;
-    }
 }
 
 @media (max-width: 900px) {
