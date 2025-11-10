@@ -16,7 +16,7 @@
 
 ### Fixed
 - **First-stream detection fallback.** Streaming tokens now capture their message key when the generation-start hook fires too early, restoring roster updates for the first outputs after loading a chat.
-- **Scene roster scrolling.** The roster list keeps its scrollbox active so large casts remain accessible without shifting the entire panel.
+- **Scene roster scrolling.** The roster list keeps its scrollbox active with a single-card viewport so large casts remain accessible without crushing entry layouts or shifting the entire panel.
 - **Scene panel analytics remapping.** Detection events recorded during streaming now follow the rendered message key, restoring roster/results feeds that previously appeared empty after generation finished.
 - **Scene panel mounting.** Resolving pre-fetched container references no longer breaks roster rendering, fixing the empty panel and console error triggered when the UI initializes.
 - **Scene panel rehydration.** Switching chats or waiting for autosaves now restores the latest assistant message so the roster, active characters, and live log remain populated instead of clearing after a few seconds.

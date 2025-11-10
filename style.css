@@ -1737,18 +1737,25 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
 }
 
 .cs-scene-panel__section[data-scene-panel="roster"] {
-    flex: 1 1 auto;
+    --cs-scene-roster-scroll-height: 128px;
+    flex: 0 0 auto;
     min-height: 0;
     display: flex;
     flex-direction: column;
 }
 
 .cs-scene-panel__section[data-scene-panel="roster"] > .cs-scene-panel__scrollable {
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     min-height: 0;
-    max-height: none;
+    max-height: var(--cs-scene-roster-scroll-height);
     padding-right: 6px;
     overflow-y: auto;
+    scroll-behavior: smooth;
+    scrollbar-gutter: stable both-edges;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-bottom: 4px;
 }
 
 .cs-scene-panel__card-list {
@@ -1819,6 +1826,7 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
     overflow: hidden;
     transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease, background 0.25s ease;
     box-shadow: 0 10px 24px rgba(15, 19, 30, 0.18);
+    flex: 0 0 auto;
 }
 
 .cs-scene-roster__row::before {
