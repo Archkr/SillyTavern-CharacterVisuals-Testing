@@ -1734,6 +1734,15 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
     gap: 10px;
 }
 
+.cs-scene-panel__section[data-scene-panel="roster"] {
+    flex: 0 0 auto;
+}
+
+.cs-scene-panel__section[data-scene-panel="roster"] > .cs-scene-panel__scrollable {
+    max-height: min(420px, 45vh);
+    padding-right: 6px;
+}
+
 .cs-scene-panel__card-list {
     max-height: 260px;
 }
