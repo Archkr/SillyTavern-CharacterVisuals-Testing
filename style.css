@@ -1737,18 +1737,21 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
 }
 
 .cs-scene-panel__section[data-scene-panel="roster"] {
-    flex: 1 1 auto;
+    --cs-scene-roster-scroll-height: 96px;
+    flex: 0 0 auto;
     min-height: 0;
     display: flex;
     flex-direction: column;
 }
 
 .cs-scene-panel__section[data-scene-panel="roster"] > .cs-scene-panel__scrollable {
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     min-height: 0;
-    max-height: none;
+    max-height: var(--cs-scene-roster-scroll-height);
     padding-right: 6px;
     overflow-y: auto;
+    scroll-behavior: smooth;
+    scrollbar-gutter: stable both-edges;
 }
 
 .cs-scene-panel__card-list {
