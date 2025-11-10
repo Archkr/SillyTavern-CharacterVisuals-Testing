@@ -31,3 +31,29 @@ test("resolveEventIdentifiers still accepts explicit string candidates", () => {
     const result = resolveEventIdentifiers(eventTypes, ["STREAM_TOKEN", "GENERATION_TOKEN"]);
     assert.deepEqual(result.sort(), ["GENERATION_TOKEN", "stream_token"].sort(), "should include mapped and literal names");
 });
+
+test("resolveEventIdentifiers traverses nested objects", () => {
+    const eventTypes = {
+        generation: {
+            stream: {
+                started: "generation_stream_started",
+            },
+        },
+    };
+    const result = resolveEventIdentifiers(eventTypes, [
+        { match: /(GENERATION|STREAM).*START/i },
+    ]);
+    assert.deepEqual(result, ["generation_stream_started"], "should detect events within nested maps");
+});
+
+test("resolveEventIdentifiers resolves nested keys by name", () => {
+    const eventTypes = {
+        history: {
+            message: {
+                deleted: "message_deleted",
+            },
+        },
+    };
+    const result = resolveEventIdentifiers(eventTypes, ["deleted", "history.message.deleted"]);
+    assert.deepEqual(result.sort(), ["history.message.deleted", "message_deleted"].sort(), "should match nested keys by name");
+});
