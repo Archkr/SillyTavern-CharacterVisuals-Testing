@@ -55,9 +55,69 @@ const CHAT_CHANGED_KEYS = [
 function resolveEventIdentifiers(eventTypes, candidates) {
     const results = new Set();
     const source = typeof eventTypes === "object" && eventTypes !== null ? eventTypes : null;
-    const entries = source
-        ? Object.entries(source).filter(([key, value]) => typeof value === "string" && value.trim().length)
-        : [];
+
+    const flattenEventTypeEntries = (value) => {
+        const entries = [];
+        const visited = new Set();
+
+        const pushEntry = (path, resolved) => {
+            if (typeof resolved !== "string") {
+                return;
+            }
+            const trimmed = resolved.trim();
+            if (!trimmed) {
+                return;
+            }
+            const keyName = path.length ? String(path[path.length - 1]) : "";
+            const pathString = path.join(".");
+            if (keyName) {
+                entries.push({ key: keyName, path: pathString, value: trimmed });
+            }
+            if (pathString && pathString !== keyName) {
+                entries.push({ key: pathString, path: pathString, value: trimmed });
+            }
+        };
+
+        const visit = (current, path = []) => {
+            if (!current) {
+                return;
+            }
+            if (typeof current === "string") {
+                pushEntry(path, current);
+                return;
+            }
+            if (typeof current !== "object") {
+                return;
+            }
+            if (visited.has(current)) {
+                return;
+            }
+            visited.add(current);
+
+            if (current instanceof Map) {
+                current.forEach((child, key) => visit(child, [...path, key]));
+                return;
+            }
+
+            if (Array.isArray(current)) {
+                current.forEach((child, index) => visit(child, [...path, index]));
+                return;
+            }
+
+            Object.entries(current).forEach(([key, child]) => {
+                if (typeof child === "string") {
+                    pushEntry([...path, key], child);
+                    return;
+                }
+                visit(child, [...path, key]);
+            });
+        };
+
+        visit(value, []);
+        return entries;
+    };
+
+    const entries = source ? flattenEventTypeEntries(source) : [];
 
     const addName = (name) => {
         if (typeof name === "string") {
@@ -79,16 +139,32 @@ function resolveEventIdentifiers(eventTypes, candidates) {
         }
     };
 
+    const findEntryByKey = (key) => {
+        if (!entries.length) {
+            return null;
+        }
+        const target = String(key).trim();
+        if (!target) {
+            return null;
+        }
+        const direct = entries.find((entry) => String(entry.key) === target);
+        if (direct) {
+            return direct.value;
+        }
+        const lowerTarget = target.toLowerCase();
+        const match = entries.find((entry) => String(entry.key).toLowerCase() === lowerTarget);
+        return match ? match.value : null;
+    };
+
     const matchEntries = (pattern) => {
         if (!entries.length) {
             return false;
         }
+        const regex = pattern instanceof RegExp ? pattern : new RegExp(String(pattern), "i");
         let matched = false;
-        entries.forEach(([key, value]) => {
-            const keyName = typeof key === "string" ? key : "";
-            const resolved = value || keyName;
-            if (pattern.test(keyName) || pattern.test(resolved)) {
-                addName(resolved);
+        entries.forEach((entry) => {
+            if (regex.test(String(entry.key)) || (entry.path && regex.test(String(entry.path))) || regex.test(entry.value)) {
+                addName(entry.value);
                 matched = true;
             }
         });
@@ -104,11 +180,19 @@ function resolveEventIdentifiers(eventTypes, candidates) {
             if (!key) {
                 return;
             }
+            const mapped = findEntryByKey(key);
+            if (mapped) {
+                addName(mapped);
+                if (mapped !== key && key.includes(".")) {
+                    addName(key);
+                }
+                return;
+            }
             if (source && typeof source[key] === "string" && source[key].trim()) {
                 addName(source[key]);
-            } else {
-                addName(key);
+                return;
             }
+            addName(key);
             return;
         }
         if (typeof candidate === "object") {
