@@ -58,7 +58,20 @@ function resolveEventIdentifiers(eventTypes, candidates) {
 
     const flattenEventTypeEntries = (value) => {
         const entries = [];
-        const visited = new Set();
+        const visited = new WeakSet();
+
+        const normalizePathPart = (part) => {
+            if (typeof part === "symbol") {
+                return part.description || part.toString();
+            }
+            if (typeof part === "string") {
+                return part;
+            }
+            if (Number.isFinite(part)) {
+                return String(part);
+            }
+            return part != null ? String(part) : "";
+        };
 
         const pushEntry = (path, resolved) => {
             if (resolved == null) {
@@ -75,8 +88,14 @@ function resolveEventIdentifiers(eventTypes, candidates) {
                 return;
             }
 
-            const keyName = path.length ? String(path[path.length - 1]) : "";
-            const pathString = path.join(".");
+            const normalizedPath = path.map(normalizePathPart).filter((part) => part !== "");
+            if (!normalizedPath.length) {
+                entries.push({ key: "", path: "", value: normalizedValue });
+                return;
+            }
+
+            const keyName = normalizedPath[normalizedPath.length - 1];
+            const pathString = normalizedPath.join(".");
             if (keyName) {
                 entries.push({ key: keyName, path: pathString, value: normalizedValue });
             }
@@ -86,7 +105,7 @@ function resolveEventIdentifiers(eventTypes, candidates) {
         };
 
         const visit = (current, path = []) => {
-            if (!current) {
+            if (current == null) {
                 return;
             }
             if (typeof current === "string" || typeof current === "symbol") {
@@ -102,21 +121,34 @@ function resolveEventIdentifiers(eventTypes, candidates) {
             visited.add(current);
 
             if (current instanceof Map) {
-                current.forEach((child, key) => visit(child, [...path, key]));
+                current.forEach((child, key) => {
+                    visit(child, [...path, key]);
+                });
                 return;
             }
 
             if (Array.isArray(current)) {
-                current.forEach((child, index) => visit(child, [...path, index]));
+                current.forEach((child, index) => {
+                    visit(child, [...path, index]);
+                });
                 return;
             }
 
-            Object.entries(current).forEach(([key, child]) => {
-                if (typeof child === "string") {
-                    pushEntry([...path, key], child);
+            Reflect.ownKeys(current).forEach((key) => {
+                let child;
+                try {
+                    child = current[key];
+                } catch (error) {
                     return;
                 }
-                visit(child, [...path, key]);
+
+                const nextPath = [...path, key];
+                if (typeof child === "string" || typeof child === "symbol") {
+                    pushEntry(nextPath, child);
+                    return;
+                }
+
+                visit(child, nextPath);
             });
         };
 

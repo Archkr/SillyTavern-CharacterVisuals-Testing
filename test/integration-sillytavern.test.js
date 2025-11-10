@@ -72,3 +72,26 @@ test("resolveEventIdentifiers returns symbol values when available", () => {
     ]);
     assert.equal(result, streamStarted, "should preserve symbol identifiers for registration");
 });
+
+test("resolveEventIdentifiers reads non-enumerable event descriptors", () => {
+    const eventTypes = {};
+    Object.defineProperty(eventTypes, "GENERATION_STARTED", {
+        value: "generation_started_hidden",
+        enumerable: false,
+    });
+    const result = resolveEventIdentifiers(eventTypes, ["GENERATION_STARTED"]);
+    assert.deepEqual(result, ["generation_started_hidden"], "should detect hidden descriptor values");
+});
+
+test("resolveEventIdentifiers inspects symbol keyed events", () => {
+    const symbolKey = Symbol("GENERATION_STARTED");
+    const eventTypes = {};
+    Object.defineProperty(eventTypes, symbolKey, {
+        value: "generation_started_symbol",
+        enumerable: false,
+    });
+    const result = resolveEventIdentifiers(eventTypes, [
+        { match: /(GENERATION|STREAM).*START/i },
+    ]);
+    assert.deepEqual(result, ["generation_started_symbol"], "should match symbol keyed entries by description");
+});
