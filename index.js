@@ -55,6 +55,7 @@ import {
     normalizePatternSlot,
     preparePatternSlotsForSave,
     flattenPatternSlots,
+    reconcilePatternSlotReferences,
 } from "./profile-utils.js";
 import {
     setScenePanelContainer,
@@ -4138,6 +4139,10 @@ function commitProfileChanges({
     const normalized = normalizeProfile(saveCurrentProfileData(), PROFILE_DEFAULTS);
     const mappings = Array.isArray(normalized.mappings) ? normalized.mappings : [];
     mappings.forEach(ensureMappingCardId);
+    if (Array.isArray(normalized.patternSlots)) {
+        const existingSlots = Array.isArray(profile.patternSlots) ? profile.patternSlots : [];
+        normalized.patternSlots = reconcilePatternSlotReferences(existingSlots, normalized.patternSlots);
+    }
     Object.assign(profile, normalized);
     profile.mappings = mappings;
     if (recompile) {

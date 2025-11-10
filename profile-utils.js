@@ -163,6 +163,81 @@ export function patternSlotHasIdentity(entry = {}, { normalized = false } = {}) 
     return Boolean(name || folder || aliases.length);
 }
 
+function cloneSlotValue(value) {
+    if (Array.isArray(value)) {
+        return value.map((item) => cloneSlotValue(item));
+    }
+    if (value && typeof value === 'object') {
+        return { ...value };
+    }
+    return value;
+}
+
+function syncPatternSlotReference(target, source) {
+    if (!target || typeof target !== 'object') {
+        return source;
+    }
+    if (!source || typeof source !== 'object') {
+        return target;
+    }
+
+    const reservedKeys = new Set(['__slotId']);
+    const sourceKeys = Object.keys(source);
+
+    for (const key of Object.keys(target)) {
+        if (reservedKeys.has(key)) {
+            continue;
+        }
+        if (!sourceKeys.includes(key)) {
+            delete target[key];
+        }
+    }
+
+    for (const key of sourceKeys) {
+        if (reservedKeys.has(key)) {
+            continue;
+        }
+        const value = source[key];
+        if (value === undefined) {
+            delete target[key];
+            continue;
+        }
+        target[key] = cloneSlotValue(value);
+    }
+
+    return target;
+}
+
+export function reconcilePatternSlotReferences(existingSlots = [], nextSlots = []) {
+    if (!Array.isArray(nextSlots)) {
+        return [];
+    }
+
+    const lookup = new Map();
+    if (Array.isArray(existingSlots)) {
+        existingSlots.forEach((slot) => {
+            if (!slot || typeof slot !== 'object') {
+                return;
+            }
+            const slotId = typeof slot.__slotId === 'string' ? slot.__slotId : null;
+            if (slotId) {
+                lookup.set(slotId, slot);
+            }
+        });
+    }
+
+    return nextSlots.map((slot) => {
+        if (!slot || typeof slot !== 'object') {
+            return slot;
+        }
+        const slotId = typeof slot.__slotId === 'string' ? slot.__slotId : null;
+        if (slotId && lookup.has(slotId)) {
+            return syncPatternSlotReference(lookup.get(slotId), slot);
+        }
+        return slot;
+    });
+}
+
 export function flattenPatternSlots(slots = []) {
     const result = [];
     const seen = new Set();
