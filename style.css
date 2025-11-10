@@ -1504,34 +1504,22 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
     flex-wrap: wrap;
 }
 
-.cs-scene-panel__headline {
+.cs-scene-panel__title {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 14px;
     flex: 1 1 auto;
-    padding: 14px 16px;
-    border-radius: 16px;
-    background: linear-gradient(140deg, rgba(156, 125, 255, 0.32), rgba(64, 180, 255, 0.2));
-    border: 1px solid rgba(255, 255, 255, 0.16);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
-}
-
-.cs-scene-panel__crest {
-    width: 46px;
-    height: 46px;
+    padding: 12px 14px;
     border-radius: 14px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.28);
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
-    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(12, 16, 28, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35), 0 12px 28px rgba(0, 0, 0, 0.28);
 }
 
-.cs-scene-panel__crest i {
-    font-size: 1.6rem;
-    color: var(--primary-color, #c9a9ff);
-    text-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+.cs-scene-panel__title > i {
+    font-size: 1.45rem;
+    color: var(--primary-color, #9c7dff);
+    text-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
 }
 
 .cs-scene-panel__title-copy {
@@ -1540,23 +1528,17 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
     gap: 4px;
 }
 
-.cs-scene-panel__eyebrow {
-    font-size: 0.7rem;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: rgba(255, 255, 255, 0.66);
-}
-
 .cs-scene-panel__title-copy h3 {
     margin: 0;
     font-size: 1.35rem;
     color: var(--SmartThemeBodyColor, #f3f3f3);
 }
 
-.cs-scene-panel__subtitle {
+
+.cs-scene-panel__title-copy p {
     margin: 0;
-    font-size: 0.88rem;
-    color: var(--text-color-soft, rgba(255, 255, 255, 0.75));
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.72);
 }
 
 .cs-scene-panel__toolbar {
@@ -1577,7 +1559,7 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: background 0.2s ease, border-color 0.2s ease;
+    transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }
 
 .cs-scene-panel__icon-button[aria-pressed="true"] {
@@ -1590,6 +1572,12 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
 .cs-scene-panel__icon-button:focus-visible {
     background: rgba(255, 255, 255, 0.16);
     border-color: rgba(255, 255, 255, 0.35);
+    transform: translateY(-1px);
+}
+
+.cs-scene-panel__icon-button:focus-visible {
+    outline: 2px solid rgba(156, 125, 255, 0.65);
+    outline-offset: 2px;
 }
 
 .cs-scene-panel__helper {
@@ -1624,6 +1612,14 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
     border: 1px solid rgba(255, 255, 255, 0.05);
     border-radius: 12px;
     padding: 14px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.cs-scene-panel__section:hover,
+.cs-scene-panel__section:focus-within {
+    background: rgba(0, 0, 0, 0.32);
+    border-color: rgba(156, 125, 255, 0.35);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
 }
 
 [data-scene-panel-hidden="true"] {
@@ -1676,6 +1672,20 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
 .cs-scene-panel__text-button:hover,
 .cs-scene-panel__text-button:focus-visible {
     text-decoration: underline;
+    outline: 2px solid rgba(156, 125, 255, 0.45);
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cs-scene-panel__icon-button,
+    .cs-scene-panel__section {
+        transition: none;
+    }
+
+    .cs-scene-panel__icon-button:hover,
+    .cs-scene-panel__icon-button:focus-visible {
+        transform: none;
+    }
 }
 
 .cs-scene-panel__scrollable,

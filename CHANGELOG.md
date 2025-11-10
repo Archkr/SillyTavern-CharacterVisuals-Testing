@@ -2,19 +2,9 @@
 
 ## v3.6.0 (Unreleased)
 
-### Added
-- **Scene panel command center.** Polished the side panel with a branded header, roster manager drawer, log viewer, auto-pin highlight toggle, and quick focus-lock controls so every button delivers meaningful actions.
-- **Summon toggle for the scene panel.** Hide the panel completely and bring it back with a floating summon button that stays available as a quick toggle so the chat column can reclaim the full width whenever you need extra room.
-- **Inline scene roster settings.** The footer button now opens an in-panel settings sheet with quick toggles for auto-open behavior, section visibility, and roster avatars.
-
-### Fixed
-- **Scene panel analytics remapping.** Detection events recorded during streaming now follow the rendered message key, restoring roster/results feeds that previously appeared empty after generation finished.
-- **Scene panel mounting.** Resolving pre-fetched container references no longer breaks roster rendering, fixing the empty panel and console error triggered when the UI initializes.
-- **Scene panel rehydration.** Switching chats or waiting for autosaves now restores the latest assistant message so the roster, active characters, and live log remain populated instead of clearing after a few seconds.
-- **Live log stability.** The live diagnostics panel keeps the prior message data visible until the next stream produces detections, so it no longer flickers "Awaiting detections" while idle.
-- **Scene panel hide toggle.** Hiding the command center now removes the panel entirely so no translucent shell remains on screen.
-- **Scene control center refresh.** Event subscriptions now match additional SillyTavern generation hooks, so the roster, live diagnostics, and status copy update right after streaming and message completion without needing manual history edits.
-- **Streaming event detection.** The scene panel now tracks SillyTavern's symbol-based generation events, restoring auto-open behaviour and post-stream analytics updates for live messages.
+### Improved
+- **Scene control center polish.** Restored the native extension palette, tightened spacing, and refreshed hover/focus feedback so the panel looks sharper without breaking the existing theme.
+- **Live status helper accessibility.** The sync helper message now announces updates politely for assistive tech and keeps the toggle label tied to its checkbox for clearer navigation.
 
 ## v3.5.0
 

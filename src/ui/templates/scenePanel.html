@@ -10,7 +10,7 @@
                 <div class="cs-scene-panel__title-copy">
                     <h3>Scene Roster</h3>
                     <p>Track who is active in the current scene.</p>
-                    <p class="cs-scene-panel__helper" data-scene-panel="status-text">Mirrors the live tester timeline while tracking actual chat results.</p>
+                    <p class="cs-scene-panel__helper" data-scene-panel="status-text" aria-live="polite">Mirrors the live tester timeline while tracking actual chat results.</p>
                 </div>
             </div>
             <div class="cs-scene-panel__toolbar" data-scene-panel="toolbar">
@@ -38,7 +38,7 @@
                     <i class="fa-solid fa-rotate" aria-hidden="true"></i>
                     <span class="visually-hidden">Refresh roster</span>
                 </button>
-                <label class="cs-scene-panel__toggle" data-scene-panel="auto-pin">
+                <label class="cs-scene-panel__toggle" data-scene-panel="auto-pin" for="cs-scene-auto-pin">
                     <input id="cs-scene-auto-pin" type="checkbox" />
                     <span>Auto-pin active</span>
                 </label>
