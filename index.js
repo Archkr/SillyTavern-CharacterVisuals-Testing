@@ -1407,6 +1407,21 @@ function collectScenePanelState() {
         })
         : [];
 
+    const eventsByCharacter = new Map();
+    const MAX_RANKING_EVENTS = 2;
+    events.forEach((event) => {
+        if (!event || typeof event !== "object") {
+            return;
+        }
+        const normalizedName = normalizeRosterKey(event.normalized || event.name);
+        if (!normalizedName) {
+            return;
+        }
+        const list = eventsByCharacter.get(normalizedName) || [];
+        list.push(event);
+        eventsByCharacter.set(normalizedName, list);
+    });
+
     const latestRankingUpdatedAt = Number.isFinite(state.latestTopRanking?.updatedAt)
         ? state.latestTopRanking.updatedAt
         : null;
@@ -1422,12 +1437,28 @@ function collectScenePanelState() {
         testers,
     });
 
+    const rankingSource = ranking.length ? ranking : rankingForMessage.slice(0, 4);
+    const preparedRanking = rankingSource.map((entry) => {
+        if (!entry || typeof entry !== "object") {
+            return entry;
+        }
+        const normalizedName = normalizeRosterKey(entry.normalized || entry.name);
+        const characterEvents = normalizedName ? eventsByCharacter.get(normalizedName) : null;
+        const trimmedEvents = characterEvents && characterEvents.length
+            ? characterEvents.slice(-MAX_RANKING_EVENTS)
+            : [];
+        return {
+            ...entry,
+            events: trimmedEvents,
+        };
+    });
+
     return {
         scene,
         membership,
         testers,
         settings: panelSettings,
-        ranking: ranking.length ? ranking : rankingForMessage.slice(0, 4),
+        ranking: preparedRanking,
         displayNames,
         analytics: {
             messageKey: activeKey,

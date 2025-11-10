@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { register } from "node:module";
 
+import { renderActiveCharacters } from "../src/ui/render/activeCharacters.js";
+
 await register(new URL("./module-mock-loader.js", import.meta.url));
 
 const extensionSettingsStore = {};
@@ -273,4 +275,176 @@ test("remapMessageKey retargets recent decision events for rendered messages", (
     assert.equal(state.recentDecisionEvents[0].messageKey, "m101");
     assert.equal(state.lastTesterReport.events[0].messageKey, "m101");
     assert.equal(settings.session.recentDecisionEvents[0].messageKey, "m101");
+});
+
+function createStubFragment() {
+    return {
+        nodeType: 11,
+        children: [],
+        appendChild(child) {
+            if (!child) {
+                return child;
+            }
+            if (child.parentNode && typeof child.parentNode.removeChild === "function") {
+                child.parentNode.removeChild(child);
+            }
+            child.parentNode = this;
+            this.children.push(child);
+            return child;
+        },
+    };
+}
+
+function createStubElement(tagName) {
+    return {
+        tagName: String(tagName || "").toUpperCase(),
+        className: "",
+        textContent: "",
+        dataset: {},
+        attributes: {},
+        children: [],
+        parentNode: null,
+        appendChild(child) {
+            if (!child) {
+                return child;
+            }
+            if (child.nodeType === 11 && Array.isArray(child.children)) {
+                const nodes = child.children.slice();
+                child.children.length = 0;
+                nodes.forEach((grandchild) => {
+                    if (grandchild) {
+                        this.appendChild(grandchild);
+                    }
+                });
+                return child;
+            }
+            if (child.parentNode && typeof child.parentNode.removeChild === "function") {
+                child.parentNode.removeChild(child);
+            }
+            child.parentNode = this;
+            this.children.push(child);
+            return child;
+        },
+        removeChild(child) {
+            const index = this.children.indexOf(child);
+            if (index >= 0) {
+                this.children.splice(index, 1);
+                if (child) {
+                    child.parentNode = null;
+                }
+            }
+            return child;
+        },
+        get firstChild() {
+            return this.children[0] || null;
+        },
+        setAttribute(name, value) {
+            this.attributes[name] = value;
+        },
+    };
+}
+
+function createStubDocument() {
+    return {
+        createElement(tagName) {
+            return createStubElement(tagName);
+        },
+        createDocumentFragment() {
+            return createStubFragment();
+        },
+    };
+}
+
+test("collectScenePanelState attaches recent events for active character rendering", () => {
+    resetSceneState();
+    clearLiveTesterOutputs();
+
+    state.recentDecisionEvents = [];
+    state.topSceneRanking = new Map();
+    state.topSceneRankingUpdatedAt = new Map();
+    state.messageStats = new Map();
+    state.perMessageBuffers = new Map();
+    state.perMessageStates = new Map();
+    state.latestTopRanking = { bufKey: null, ranking: [], fullRanking: [], updatedAt: 0 };
+    state.currentGenerationKey = null;
+
+    const now = Date.now();
+    const messageKey = "m501";
+    const normalized = "kotori";
+    const rankingEntry = {
+        name: "Kotori",
+        normalized,
+        count: 5,
+        score: 99,
+        inSceneRoster: true,
+    };
+
+    state.currentGenerationKey = messageKey;
+    state.perMessageBuffers.set(messageKey, "");
+    state.messageStats.set(messageKey, new Map());
+    state.topSceneRanking.set(messageKey, [rankingEntry]);
+    state.topSceneRankingUpdatedAt.set(messageKey, now - 500);
+    state.latestTopRanking = {
+        bufKey: messageKey,
+        ranking: [rankingEntry],
+        fullRanking: [rankingEntry],
+        updatedAt: now - 500,
+    };
+
+    const eventOne = {
+        type: "switch",
+        messageKey,
+        normalized,
+        matchKind: "name",
+        charIndex: 0,
+        timestamp: now - 3000,
+    };
+    const eventTwo = {
+        type: "focus",
+        messageKey,
+        normalized,
+        matchKind: "focus-lock",
+        charIndex: 0,
+        timestamp: now - 2000,
+    };
+    const eventThree = {
+        type: "switch",
+        messageKey,
+        normalized,
+        matchKind: "name",
+        charIndex: 0,
+        timestamp: now - 1000,
+    };
+
+    state.recentDecisionEvents = [eventOne, eventTwo, eventThree];
+
+    const panelState = collectScenePanelState();
+
+    assert.ok(Array.isArray(panelState.ranking));
+    assert.equal(panelState.ranking.length, 1);
+    assert.ok(Array.isArray(panelState.ranking[0].events));
+    assert.equal(panelState.ranking[0].events.length, 2);
+    assert.equal(panelState.ranking[0].events[0].timestamp, eventTwo.timestamp);
+    assert.equal(panelState.ranking[0].events[1].timestamp, eventThree.timestamp);
+
+    const previousDocument = globalThis.document;
+    const stubDocument = createStubDocument();
+    globalThis.document = stubDocument;
+
+    try {
+        const host = createStubElement("section");
+        renderActiveCharacters({ el: host }, panelState);
+        assert.equal(host.children.length > 0, true, "expected at least one rendered card");
+        const card = host.children.find((child) => child.tagName === "ARTICLE");
+        assert.ok(card, "expected ranking card element");
+        const eventRow = card.children.find((child) => child.className === "cs-scene-active__event");
+        assert.ok(eventRow, "expected event row to render for recent event");
+        assert.ok(eventRow.textContent.includes("switch"), "expected event text to include event type");
+    } finally {
+        if (typeof previousDocument === "undefined") {
+            delete globalThis.document;
+        } else {
+            globalThis.document = previousDocument;
+        }
+    }
 });
