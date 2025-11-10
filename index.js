@@ -1303,13 +1303,20 @@ function maybeAutoExpandScenePanel(reason = "result") {
     }
     const settings = getSettings?.();
     const panelSettings = ensureScenePanelSettings(settings || {});
+    const shouldAutoOpen = reason === "stream"
+        ? panelSettings.autoOpenOnStream
+        : panelSettings.autoOpenOnResults;
+
+    if (!shouldAutoOpen) {
+        return;
+    }
+
     if (!panelSettings.enabled) {
-        return;
-    }
-    if (reason === "stream" && !panelSettings.autoOpenOnStream) {
-        return;
-    }
-    if (reason === "result" && !panelSettings.autoOpenOnResults) {
+        panelSettings.enabled = true;
+        updateScenePanelSettingControls(panelSettings);
+        setScenePanelCollapsed(false);
+        requestScenePanelRender("auto-open-enable", { immediate: true });
+        persistSettings(null, "info");
         return;
     }
     if (!isScenePanelCollapsed()) {
