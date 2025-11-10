@@ -12,6 +12,7 @@
 ### Improved
 - **Scene control center polish.** Refined the panel with a live-status banner, quick section navigation chips, richer hover states, and smoother animations to make the roster workspace feel faster and more intentional.
 - **Live log export parity.** Copying the live log now produces a full report with detection summaries, switch analytics, skip reasons, and roster state—matching the fidelity of the live pattern tester output.
+- **Scene panel layout cleanup.** Retired the legacy collapse handle so the crest header and toolbar own panel visibility, keeping the frame tidy without the extra toggle stub.
 
 ### Fixed
 - **Scene panel analytics remapping.** Detection events recorded during streaming now follow the rendered message key, restoring roster/results feeds that previously appeared empty after generation finished.
@@ -22,7 +23,7 @@
 - **Scene control center refresh.** Event subscriptions now match additional SillyTavern generation hooks, so the roster, live diagnostics, and status copy update right after streaming and message completion without needing manual history edits.
 - **Streaming event detection.** The scene panel now tracks SillyTavern's symbol-based generation events, restoring auto-open behaviour and post-stream analytics updates for live messages.
 - **Character slot persistence.** Pattern cards stay linked to the active profile after auto-saves, so follow-up edits continue to stick instead of silently rolling back.
-- **Scene panel glow overflow.** The aurora backdrop and interactive button glows now render without being clipped by the panel frame.
+- **Scene panel glow overflow.** The aurora backdrop now animates entirely inside the frame and keeps a generous bleed so no hard edges peek through mid-cycle.
 
 ## v3.5.0
 

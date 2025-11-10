@@ -1482,7 +1482,7 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
     border-radius: 16px;
     box-shadow: 0 18px 32px rgba(0, 0, 0, 0.35);
     color: var(--SmartThemeBodyColor, #f3f3f3);
-    overflow: visible;
+    overflow: hidden;
     backdrop-filter: blur(16px);
     z-index: 1040;
     isolation: isolate;
@@ -1500,6 +1500,7 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
     pointer-events: none;
     mix-blend-mode: screen;
     animation: cs-scene-panel-aurora 14s ease-in-out infinite alternate;
+    transform-origin: center;
     z-index: -1;
 }
 
@@ -2118,16 +2119,16 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
 
 @keyframes cs-scene-panel-aurora {
     0% {
-        transform: translate3d(-6%, -4%, 0) scale(1.05);
-        opacity: 0.6;
+        transform: translate3d(-2%, -1%, 0) scale(1.14);
+        opacity: 0.68;
     }
     50% {
-        transform: translate3d(4%, 2%, 0) scale(1.08);
-        opacity: 0.9;
+        transform: translate3d(2%, 3%, 0) scale(1.2);
+        opacity: 0.92;
     }
     100% {
-        transform: translate3d(-2%, 6%, 0) scale(1.02);
-        opacity: 0.7;
+        transform: translate3d(-1%, 4%, 0) scale(1.15);
+        opacity: 0.75;
     }
 }
 
@@ -2507,41 +2508,6 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
     margin-top: 4px;
 }
 
-.cs-scene-panel__collapse-toggle {
-    position: absolute;
-    top: 18px;
-    left: -44px;
-    width: 40px;
-    height: 80px;
-    border-radius: 12px 0 0 12px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    background: rgba(0, 0, 0, 0.5);
-    color: var(--primary-color, #9c7dff);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: background 0.2s ease, color 0.2s ease;
-    z-index: 2;
-}
-
-.cs-scene-panel__collapse-toggle:hover,
-.cs-scene-panel__collapse-toggle:focus-visible {
-    background: rgba(255, 255, 255, 0.12);
-    color: var(--SmartThemeBodyColor, #f3f3f3);
-}
-
-.cs-scene-panel__collapse-toggle--notify {
-    animation: cs-scene-panel-toggle-pulse 1.4s ease-in-out 3;
-    color: #ffe9a8;
-    box-shadow: 0 0 0 2px rgba(255, 185, 96, 0.45);
-}
-
-.cs-scene-panel__collapse-toggle--notify i {
-    animation: cs-scene-panel-toggle-wiggle 1.4s ease-in-out 3;
-    text-shadow: 0 0 12px rgba(255, 210, 140, 0.85);
-}
-
 .cs-scene-panel--collapsed,
 .cs-scene-panel[data-cs-collapsed="true"] {
     width: var(--cs-scene-panel-collapsed-width);
@@ -2554,11 +2520,6 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
     opacity: 0;
     pointer-events: none;
     visibility: hidden;
-}
-
-.cs-scene-panel--collapsed .cs-scene-panel__collapse-toggle i,
-.cs-scene-panel[data-cs-collapsed="true"] .cs-scene-panel__collapse-toggle i {
-    transform: rotate(180deg);
 }
 
 .cs-scene-panel .visually-hidden {
@@ -2581,14 +2542,6 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
         bottom: 16px;
         width: min(380px, 88vw);
         max-height: calc(100vh - calc(var(--topBarBlockSize, 3.25rem) + 28px));
-    }
-
-    .cs-scene-panel__collapse-toggle {
-        left: auto;
-        right: 16px;
-        top: auto;
-        bottom: 16px;
-        border-radius: 12px;
     }
 
     .cs-scene-panel__summon[data-panel-visible="true"] {

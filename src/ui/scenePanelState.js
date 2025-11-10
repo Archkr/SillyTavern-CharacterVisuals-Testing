@@ -28,7 +28,11 @@ export function getScenePanelContent() {
 }
 
 export function setSceneCollapseToggle($element) {
-    $sceneCollapseToggle = $element;
+    if ($element && typeof $element.length === "number" && $element.length === 0) {
+        $sceneCollapseToggle = null;
+        return;
+    }
+    $sceneCollapseToggle = $element || null;
 }
 
 export function getSceneCollapseToggle() {
