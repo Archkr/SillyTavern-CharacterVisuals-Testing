@@ -1482,7 +1482,7 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
     border-radius: 16px;
     box-shadow: 0 18px 32px rgba(0, 0, 0, 0.35);
     color: var(--SmartThemeBodyColor, #f3f3f3);
-    overflow: hidden;
+    overflow: visible;
     backdrop-filter: blur(16px);
     z-index: 1040;
     isolation: isolate;
@@ -1492,6 +1492,7 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
     content: "";
     position: absolute;
     inset: 0;
+    border-radius: inherit;
     background:
         radial-gradient(circle at 20% -10%, rgba(151, 109, 255, 0.28), transparent 55%),
         radial-gradient(circle at 110% 20%, rgba(64, 207, 255, 0.25), transparent 50%);
@@ -1517,7 +1518,7 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
     gap: 16px;
     padding: 20px;
     height: 100%;
-    overflow: hidden;
+    overflow: visible;
 }
 
 .cs-scene-panel__sections {

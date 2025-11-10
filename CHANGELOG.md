@@ -21,6 +21,8 @@
 - **Scene panel hide toggle.** Hiding the command center now removes the panel entirely so no translucent shell remains on screen.
 - **Scene control center refresh.** Event subscriptions now match additional SillyTavern generation hooks, so the roster, live diagnostics, and status copy update right after streaming and message completion without needing manual history edits.
 - **Streaming event detection.** The scene panel now tracks SillyTavern's symbol-based generation events, restoring auto-open behaviour and post-stream analytics updates for live messages.
+- **Character slot persistence.** Pattern cards stay linked to the active profile after auto-saves, so follow-up edits continue to stick instead of silently rolling back.
+- **Scene panel glow overflow.** The aurora backdrop and interactive button glows now render without being clipped by the panel frame.
 
 ## v3.5.0
 
