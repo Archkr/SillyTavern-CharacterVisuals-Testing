@@ -205,6 +205,9 @@ function normalizeMember(member) {
     if (!normalized) {
         return null;
     }
+    const turnsRemaining = Number.isFinite(member.turnsRemaining)
+        ? Math.max(0, Math.floor(member.turnsRemaining))
+        : null;
     return {
         name: member.name || normalized,
         normalized,
@@ -212,7 +215,7 @@ function normalizeMember(member) {
         lastSeenAt: Number.isFinite(member.lastSeenAt) ? member.lastSeenAt : null,
         lastLeftAt: Number.isFinite(member.lastLeftAt) ? member.lastLeftAt : null,
         active: Boolean(member.active),
-        turnsRemaining: Number.isFinite(member.turnsRemaining) ? member.turnsRemaining : null,
+        turnsRemaining,
     };
 }
 
@@ -243,10 +246,13 @@ function mergeRosterData(scene, membership, testers, now) {
             if (Number.isFinite(normalized.joinedAt)) {
                 existing.joinedAt = existing.joinedAt || normalized.joinedAt;
             }
-            if (Number.isFinite(normalized.turnsRemaining)) {
-                existing.turnsRemaining = Number.isFinite(existing.turnsRemaining)
-                    ? Math.min(existing.turnsRemaining, normalized.turnsRemaining)
-                    : normalized.turnsRemaining;
+            const normalizedTurns = Number.isFinite(normalized.turnsRemaining)
+                ? Math.max(0, Math.floor(normalized.turnsRemaining))
+                : null;
+            if (normalizedTurns != null) {
+                existing.turnsRemaining = normalizedTurns;
+            } else if (!Number.isFinite(existing.turnsRemaining)) {
+                existing.turnsRemaining = null;
             }
             existing.lastLeftAt = null;
             sceneActive.add(existing.normalized);
