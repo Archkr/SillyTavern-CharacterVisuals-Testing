@@ -1887,6 +1887,8 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
     border: 1px solid rgba(255, 255, 255, 0.04);
     position: relative;
     overflow: hidden;
+    isolation: isolate;
+    z-index: 0;
     transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease, background 0.25s ease;
     box-shadow: 0 10px 24px rgba(15, 19, 30, 0.18);
     flex: 0 0 auto;
@@ -1902,6 +1904,12 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
     transform: translateY(60%);
     transition: opacity 0.35s ease, transform 0.35s ease;
     pointer-events: none;
+    z-index: 0;
+}
+
+.cs-scene-roster__row > * {
+    position: relative;
+    z-index: 1;
 }
 
 .cs-scene-roster__row:hover,
