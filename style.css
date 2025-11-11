@@ -545,21 +545,25 @@
 }
 
 #costume-switcher-settings.cs-theme .cs-header-card {
-  flex-direction: row;
-  align-items: stretch;
-  gap: 20px;
-  padding: 20px 24px;
-  min-height: clamp(220px, 28vw, 280px);
-  background: linear-gradient(135deg, #1a2a3a, #2d1b3d, #3d2b4d);
-  color: var(--header-text);
+    flex-direction: row;
+    align-items: stretch;
+    gap: 20px;
+    padding: 20px 24px;
+    min-height: clamp(220px, 28vw, 280px);
+    background: transparent;
+    color: var(--header-text);
 }
 
 #costume-switcher-settings.cs-theme .cs-header-ambient {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  z-index: 0;
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 0;
+}
+
+#costume-switcher-settings.cs-theme .cs-header-ambient.organic-flow {
+    background: linear-gradient(135deg, #1a2a3a, #2d1b3d, #3d2b4d);
 }
 
 #costume-switcher-settings.cs-theme .cs-header-intro,
@@ -642,83 +646,20 @@
 }
 
 #costume-switcher-settings.cs-theme .cs-header-ambient .flow-element {
-  position: absolute;
-  border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
-  background: linear-gradient(45deg, rgba(255, 255, 255, 0.15), transparent);
-  animation: organic-morph 8s infinite ease-in-out;
-  opacity: 0.7;
+    position: absolute;
+    border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
+    background: linear-gradient(45deg, rgba(255, 255, 255, 0.15), transparent);
+    animation: organic-morph 8s infinite ease-in-out;
+    transform: translate(-50%, -50%);
 }
 
 #costume-switcher-settings.cs-theme .cs-header-ambient .flow-element::before {
-  content: "";
-  position: absolute;
-  inset: 20%;
-  background: inherit;
-  border-radius: inherit;
-  animation: organic-morph-inner 6s infinite ease-in-out reverse;
-}
-
-#costume-switcher-settings.cs-theme .cs-header-ambient .flow-element:nth-child(1) {
-  width: clamp(220px, 32vw, 360px);
-  height: clamp(220px, 32vw, 360px);
-  top: -18%;
-  left: -14%;
-}
-
-#costume-switcher-settings.cs-theme .cs-header-ambient .flow-element:nth-child(2) {
-  width: clamp(180px, 28vw, 320px);
-  height: clamp(180px, 28vw, 320px);
-  top: -26%;
-  left: 54%;
-  animation-delay: -2s;
-}
-
-#costume-switcher-settings.cs-theme .cs-header-ambient .flow-element:nth-child(3) {
-  width: clamp(160px, 22vw, 280px);
-  height: clamp(160px, 22vw, 280px);
-  top: 46%;
-  left: -12%;
-  animation-delay: -4s;
-}
-
-#costume-switcher-settings.cs-theme .cs-header-ambient .flow-element:nth-child(4) {
-  width: clamp(200px, 26vw, 320px);
-  height: clamp(200px, 26vw, 320px);
-  top: 40%;
-  left: 52%;
-  animation-delay: -6s;
-}
-
-#costume-switcher-settings.cs-theme .cs-header-ambient .flow-element:nth-child(5) {
-  width: clamp(140px, 20vw, 240px);
-  height: clamp(140px, 20vw, 240px);
-  top: 12%;
-  left: 20%;
-  animation-delay: -3s;
-}
-
-#costume-switcher-settings.cs-theme .cs-header-ambient .flow-element:nth-child(6) {
-  width: clamp(160px, 24vw, 260px);
-  height: clamp(160px, 24vw, 260px);
-  top: 68%;
-  left: 74%;
-  animation-delay: -5s;
-}
-
-#costume-switcher-settings.cs-theme .cs-header-ambient .flow-element:nth-child(7) {
-  width: clamp(120px, 18vw, 220px);
-  height: clamp(120px, 18vw, 220px);
-  top: 22%;
-  left: 78%;
-  animation-delay: -1s;
-}
-
-#costume-switcher-settings.cs-theme .cs-header-ambient .flow-element:nth-child(8) {
-  width: clamp(120px, 18vw, 200px);
-  height: clamp(120px, 18vw, 200px);
-  top: 76%;
-  left: 18%;
-  animation-delay: -7s;
+    content: "";
+    position: absolute;
+    inset: 20%;
+    background: inherit;
+    border-radius: inherit;
+    animation: organic-morph-inner 6s infinite ease-in-out reverse;
 }
 
 @keyframes organic-morph {
