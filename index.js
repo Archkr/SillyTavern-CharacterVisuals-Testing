@@ -1216,6 +1216,67 @@ function getLastTopCharacters(count = 4) {
 // SCENE PANEL RENDERING
 // ======================================================================
 const SCENE_PANEL_RENDER_DEBOUNCE_MS = 80;
+const SCENE_PANEL_NEBULA_CLOUD_BLUEPRINTS = [
+    {
+        sizeRatio: 1.44,
+        left: 30,
+        top: 60,
+        duration: 52,
+        delay: 0,
+        opacity: 0.36,
+        blur: 42,
+        rotationStart: "-18deg",
+        rotationMid: "4deg",
+        rotationEnd: "26deg",
+        scaleStart: 0.92,
+        scaleMid: 1.18,
+        scaleEnd: 0.9,
+        colorPrimary: "rgba(126, 196, 248, 0.32)",
+        colorSecondary: "rgba(214, 156, 242, 0.24)",
+    },
+    {
+        sizeRatio: 1.12,
+        left: 64,
+        top: 46,
+        duration: 46,
+        delay: -12.5,
+        opacity: 0.32,
+        blur: 36,
+        rotationStart: "14deg",
+        rotationMid: "36deg",
+        rotationEnd: "58deg",
+        scaleStart: 0.88,
+        scaleMid: 1.1,
+        scaleEnd: 0.94,
+        colorPrimary: "rgba(108, 232, 198, 0.26)",
+        colorSecondary: "rgba(110, 184, 246, 0.28)",
+    },
+    {
+        sizeRatio: 0.94,
+        left: 22,
+        top: 38,
+        duration: 38,
+        delay: -7.5,
+        opacity: 0.34,
+        blur: 28,
+        rotationStart: "-8deg",
+        rotationMid: "18deg",
+        rotationEnd: "32deg",
+        scaleStart: 0.9,
+        scaleMid: 1.16,
+        scaleEnd: 0.96,
+        colorPrimary: "rgba(226, 166, 242, 0.26)",
+        colorSecondary: "rgba(104, 188, 242, 0.26)",
+    },
+];
+const SCENE_PANEL_NEBULA_STAR_BLUEPRINTS = [
+    { sizeRatio: 0.06, left: 18, top: 34, duration: 14, delay: -4, opacity: 0.66 },
+    { sizeRatio: 0.08, left: 46, top: 28, duration: 18, delay: -9, opacity: 0.58 },
+    { sizeRatio: 0.05, left: 64, top: 62, duration: 16, delay: -6, opacity: 0.62 },
+    { sizeRatio: 0.07, left: 74, top: 38, duration: 20, delay: -10, opacity: 0.54 },
+    { sizeRatio: 0.05, left: 36, top: 58, duration: 17, delay: -3.2, opacity: 0.6 },
+    { sizeRatio: 0.04, left: 54, top: 72, duration: 22, delay: -12.6, opacity: 0.5 },
+];
 let scenePanelRenderTimer = null;
 let scenePanelRenderPending = false;
 let scenePanelUiWired = false;
@@ -1642,6 +1703,98 @@ function requestScenePanelRender(reason = "update", { immediate = false } = {}) 
     }, SCENE_PANEL_RENDER_DEBOUNCE_MS);
 }
 
+function initializeScenePanelAmbient() {
+    if (typeof document === "undefined") {
+        return;
+    }
+
+    const ambient = document.querySelector("#cs-scene-panel [data-scene-panel=\"ambient\"]");
+    if (!ambient || ambient.dataset.nebulaInitialized === "true") {
+        return;
+    }
+
+    ambient.dataset.nebulaInitialized = "true";
+    ambient.textContent = "";
+
+    const host = ambient.parentElement || ambient;
+
+    const clouds = [];
+    for (const blueprint of SCENE_PANEL_NEBULA_CLOUD_BLUEPRINTS) {
+        const layer = document.createElement("div");
+        if (!layer) {
+            continue;
+        }
+        layer.className = "nebula-cloud";
+        layer.dataset.sizeRatio = String(blueprint.sizeRatio);
+        layer.style.setProperty("--cloud-left", `${blueprint.left}%`);
+        layer.style.setProperty("--cloud-top", `${blueprint.top}%`);
+        layer.style.setProperty("--cloud-duration", `${blueprint.duration}s`);
+        layer.style.setProperty("--cloud-delay", `${blueprint.delay}s`);
+        layer.style.setProperty("--cloud-opacity", `${blueprint.opacity}`);
+        layer.style.setProperty("--cloud-blur", `${blueprint.blur}px`);
+        layer.style.setProperty("--cloud-rotation-start", blueprint.rotationStart);
+        layer.style.setProperty("--cloud-rotation-mid", blueprint.rotationMid);
+        layer.style.setProperty("--cloud-rotation-end", blueprint.rotationEnd);
+        layer.style.setProperty("--cloud-scale-start", `${blueprint.scaleStart}`);
+        layer.style.setProperty("--cloud-scale-mid", `${blueprint.scaleMid}`);
+        layer.style.setProperty("--cloud-scale-end", `${blueprint.scaleEnd}`);
+        layer.style.setProperty("--cloud-color-primary", blueprint.colorPrimary);
+        layer.style.setProperty("--cloud-color-secondary", blueprint.colorSecondary);
+        ambient.appendChild(layer);
+        clouds.push({ element: layer, blueprint });
+    }
+
+    const stars = [];
+    for (const blueprint of SCENE_PANEL_NEBULA_STAR_BLUEPRINTS) {
+        const star = document.createElement("div");
+        if (!star) {
+            continue;
+        }
+        star.className = "nebula-star";
+        star.dataset.sizeRatio = String(blueprint.sizeRatio);
+        star.style.setProperty("--star-left", `${blueprint.left}%`);
+        star.style.setProperty("--star-top", `${blueprint.top}%`);
+        star.style.setProperty("--star-duration", `${blueprint.duration}s`);
+        star.style.setProperty("--star-delay", `${blueprint.delay}s`);
+        star.style.setProperty("--star-opacity", `${blueprint.opacity}`);
+        ambient.appendChild(star);
+        stars.push({ element: star, blueprint });
+    }
+
+    const updateDimensions = () => {
+        if (!host || typeof host.getBoundingClientRect !== "function") {
+            return;
+        }
+        const { width, height } = host.getBoundingClientRect();
+        const reference = Math.max(width, height, 1);
+
+        for (const entry of clouds) {
+            if (!entry?.element) {
+                continue;
+            }
+            const baseSize = reference * entry.blueprint.sizeRatio;
+            entry.element.style.setProperty("--cloud-size", `${baseSize}px`);
+        }
+
+        for (const entry of stars) {
+            if (!entry?.element) {
+                continue;
+            }
+            const baseSize = reference * entry.blueprint.sizeRatio;
+            entry.element.style.setProperty("--star-size", `${baseSize}px`);
+        }
+    };
+
+    updateDimensions();
+
+    if (typeof ResizeObserver === "function" && host) {
+        const observer = new ResizeObserver(updateDimensions);
+        observer.observe(host);
+    } else if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+        window.addEventListener("resize", updateDimensions, { passive: true });
+    }
+}
+
 function initializeScenePanelUI() {
     if (scenePanelUiWired) {
         return;
@@ -1662,6 +1815,7 @@ function initializeScenePanelUI() {
             container[0].setAttribute("data-cs-collapsed", "false");
         }
     }
+    initializeScenePanelAmbient();
     scenePanelUiWired = true;
 }
 
