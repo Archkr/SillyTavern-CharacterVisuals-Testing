@@ -243,6 +243,49 @@ test("applySceneRosterUpdate preserves per-member TTL values", () => {
     assert.equal(sceneHonoka?.turnsRemaining, 1);
 });
 
+test("applySceneRosterUpdate retains stored timestamps when refresh lacks details", () => {
+    resetSceneState();
+    clearLiveTesterOutputs();
+
+    const seed = Date.now();
+    const joinedAt = seed - 10_000;
+    const lastSeenAt = seed - 2_000;
+
+    applySceneRosterUpdate({
+        key: "m1",
+        messageId: 1,
+        roster: [
+            {
+                name: "Kotori",
+                normalized: "kotori",
+                joinedAt,
+                lastSeenAt,
+            },
+        ],
+        updatedAt: seed,
+    });
+
+    const refreshAt = seed + 5_000;
+
+    applySceneRosterUpdate({
+        key: "m2",
+        messageId: 2,
+        roster: ["Kotori"],
+        updatedAt: refreshAt,
+    });
+
+    const members = listRosterMembers();
+    const kotori = members.find((entry) => entry.normalized === "kotori");
+    assert.ok(kotori, "expected Kotori to remain in roster after refresh");
+    assert.equal(kotori?.joinedAt, joinedAt, "joinedAt should remain unchanged");
+    assert.equal(kotori?.lastSeenAt, lastSeenAt, "lastSeenAt should persist when refresh omits it");
+
+    const scene = getCurrentSceneSnapshot();
+    const sceneKotori = scene.roster.find((entry) => entry.normalized === "kotori");
+    assert.ok(sceneKotori, "expected Kotori snapshot entry");
+    assert.equal(sceneKotori?.lastSeenAt, lastSeenAt, "scene snapshot should retain lastSeenAt");
+});
+
 test("handleStream infers message key from token event payloads", () => {
     resetSceneState();
     clearLiveTesterOutputs();
