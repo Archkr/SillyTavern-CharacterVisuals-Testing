@@ -1,19 +1,21 @@
 #costume-switcher-settings.cs-theme {
-  --card-radius: 14px;
-  --card-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
-  --card-shadow-soft: 0 6px 18px rgba(0, 0, 0, 0.12);
-  --accent: var(--primary-color, #6c5ce7);
-  --accent-soft: rgba(108, 92, 231, 0.15);
-  --accent-strong: rgba(108, 92, 231, 0.35);
-  --accent-secondary: var(--secondary-color, #2ed573);
-  --danger: var(--red, #e74c3c);
-  --surface: var(--bg1);
-  --surface-soft: var(--bg2);
-  --surface-contrast: var(--bg0);
-  --text-muted: var(--text-color-soft);
-  --text-subtle: var(--text-color-soft-extra, rgba(255, 255, 255, 0.6));
-  --header-text: rgba(248, 249, 255, 0.95);
-  --header-text-subtle: rgba(248, 249, 255, 0.75);
+    --card-radius: 14px;
+    --card-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+    --card-shadow-soft: 0 6px 18px rgba(0, 0, 0, 0.12);
+    --accent: var(--primary-color, #6c5ce7);
+    --accent-soft: rgba(108, 92, 231, 0.15);
+    --accent-strong: rgba(108, 92, 231, 0.35);
+    --accent-secondary: var(--secondary-color, #2ed573);
+    --danger: var(--red, #e74c3c);
+    --surface: var(--bg1);
+    --surface-soft: var(--bg2);
+    --surface-contrast: var(--bg0);
+    --text-muted: var(--text-color-soft);
+    --text-subtle: var(--text-color-soft-extra, rgba(255, 255, 255, 0.6));
+    --header-text: rgba(248, 249, 255, 0.95);
+    --header-text-subtle: rgba(248, 249, 255, 0.75);
+    --cs-hero-gradient: linear-gradient(140deg, rgba(156, 125, 255, 0.48), rgba(64, 180, 255, 0.28));
+    --cs-hero-base: linear-gradient(155deg, rgba(18, 30, 54, 0.94), rgba(15, 24, 44, 0.96));
 }
 
 #costume-switcher-settings.cs-theme .inline-drawer {
@@ -550,7 +552,7 @@
     gap: 20px;
     padding: 18px 22px;
     min-height: clamp(180px, 22vw, 230px);
-    background: transparent;
+    background: var(--cs-hero-gradient), var(--cs-hero-base);
     color: var(--header-text);
 }
 
@@ -563,7 +565,19 @@
 }
 
 #costume-switcher-settings.cs-theme .cs-header-ambient.organic-flow {
-    background: linear-gradient(140deg, rgba(156, 125, 255, 0.32), rgba(64, 180, 255, 0.2));
+    background: var(--cs-hero-gradient);
+}
+
+#costume-switcher-settings.cs-theme .cs-header-ambient::before {
+    content: "";
+    position: absolute;
+    inset: -14% -12%;
+    background: radial-gradient(circle at 24% 22%, rgba(132, 176, 255, 0.22), transparent 62%),
+        radial-gradient(circle at 78% 68%, rgba(173, 146, 255, 0.18), transparent 74%);
+    opacity: 0.85;
+    filter: blur(16px);
+    pointer-events: none;
+    z-index: 0;
 }
 
 #costume-switcher-settings.cs-theme .cs-header-intro,
@@ -648,14 +662,14 @@
 #costume-switcher-settings.cs-theme .cs-header-ambient::after {
     content: "";
     position: absolute;
-    inset: -25% -10% 10% -10%;
-    background: radial-gradient(circle at 30% 40%, rgba(255, 255, 255, 0.22), transparent 62%),
-        radial-gradient(circle at 70% 60%, rgba(126, 213, 255, 0.18), transparent 68%);
-    opacity: 0.8;
+    inset: -18% -8% 16% -8%;
+    background: radial-gradient(circle at 32% 36%, rgba(255, 255, 255, 0.2), transparent 60%),
+        radial-gradient(circle at 74% 62%, rgba(114, 205, 255, 0.16), transparent 68%);
+    opacity: 0.7;
     mix-blend-mode: screen;
     pointer-events: none;
-    filter: blur(12px);
-    z-index: 1;
+    filter: blur(14px);
+    z-index: 2;
 }
 
 #costume-switcher-settings.cs-theme .cs-header-ambient .ripple-layer {
@@ -672,6 +686,8 @@
     mix-blend-mode: screen;
     animation: ripple-wave var(--ripple-duration, 18s) ease-in-out infinite;
     animation-delay: var(--ripple-delay, 0s);
+    z-index: 3;
+    will-change: transform, opacity;
 }
 
 #costume-switcher-settings.cs-theme .cs-header-ambient .ripple-layer::before {
@@ -679,9 +695,9 @@
     position: absolute;
     inset: 0;
     border-radius: 50%;
-    background: radial-gradient(circle at 50% 45%, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.15) 38%, rgba(255, 255, 255, 0.05) 56%, transparent 72%),
-        radial-gradient(circle at 30% 65%, rgba(120, 205, 255, 0.32), transparent 68%),
-        radial-gradient(circle at 72% 32%, rgba(177, 156, 255, 0.36), transparent 65%);
+    background: radial-gradient(circle at 52% 46%, rgba(255, 255, 255, 0.24) 0%, rgba(255, 255, 255, 0.12) 38%, rgba(255, 255, 255, 0.04) 56%, transparent 74%),
+        radial-gradient(circle at 28% 68%, rgba(128, 205, 255, 0.26), transparent 70%),
+        radial-gradient(circle at 74% 34%, rgba(173, 156, 255, 0.28), transparent 68%);
 }
 
 #costume-switcher-settings.cs-theme .cs-header-ambient .ripple-layer::after {
@@ -689,10 +705,10 @@
     position: absolute;
     inset: -18%;
     border-radius: 50%;
-    background: conic-gradient(from 180deg at 50% 50%, rgba(255, 255, 255, 0) 0deg, rgba(255, 255, 255, 0.25) 82deg, rgba(255, 255, 255, 0) 160deg, rgba(64, 180, 255, 0.22) 220deg, rgba(255, 255, 255, 0) 360deg);
+    background: conic-gradient(from 190deg at 50% 50%, rgba(255, 255, 255, 0) 0deg, rgba(255, 255, 255, 0.18) 78deg, rgba(255, 255, 255, 0) 164deg, rgba(74, 182, 255, 0.18) 230deg, rgba(255, 255, 255, 0) 360deg);
     mix-blend-mode: screen;
-    opacity: 0.8;
-    animation: ripple-sheen calc(var(--ripple-duration, 18s) * 1.15) linear infinite;
+    opacity: 0.65;
+    animation: ripple-sheen calc(var(--ripple-duration, 18s) * 1.2) linear infinite;
     animation-delay: calc(var(--ripple-delay, 0s) * 1.05);
 }
 
@@ -701,11 +717,14 @@
         transform: translate(-50%, -50%) scale(var(--ripple-scale-start, 0.45));
         opacity: 0;
     }
-    20% {
+    18% {
         opacity: var(--ripple-opacity, 0.65);
     }
-    55% {
-        opacity: calc(var(--ripple-opacity, 0.65) + 0.08);
+    48% {
+        opacity: calc(var(--ripple-opacity, 0.65) + 0.04);
+    }
+    78% {
+        opacity: calc(var(--ripple-opacity, 0.65) * 0.4);
     }
     100% {
         transform: translate(-50%, -50%) scale(var(--ripple-scale-end, 1.4));
@@ -733,12 +752,13 @@
     top: var(--spark-top, 48%);
     transform: translate(-50%, -50%);
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.12) 48%, transparent 75%);
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.36) 0%, rgba(255, 255, 255, 0.1) 48%, transparent 75%);
     mix-blend-mode: screen;
-    filter: blur(18px);
+    filter: blur(16px);
     opacity: var(--spark-opacity, 0.5);
     animation: ripple-sparkle var(--spark-duration, 10s) ease-in-out infinite;
     animation-delay: var(--spark-delay, 0s);
+    z-index: 4;
 }
 
 @keyframes ripple-sparkle {
@@ -1691,7 +1711,7 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
     flex: 1 1 auto;
     padding: 14px 16px;
     border-radius: 16px;
-    background: linear-gradient(140deg, rgba(156, 125, 255, 0.32), rgba(64, 180, 255, 0.2));
+    background: var(--cs-hero-gradient), var(--cs-hero-base);
     border: 1px solid rgba(255, 255, 255, 0.16);
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
 }
