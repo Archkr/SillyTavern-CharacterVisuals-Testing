@@ -181,6 +181,38 @@ test("createMessageState carries roster TTL forward between messages", () => {
     assert.deepEqual(Array.from(newState.sceneRoster), ["kotori"]);
 });
 
+test("createMessageState preserves roster TTL when message role is not assistant", () => {
+    resetSceneState();
+    clearLiveTesterOutputs();
+
+    state.perMessageStates = new Map();
+    state.perMessageBuffers = new Map();
+    state.currentGenerationKey = null;
+
+    const profile = { sceneRosterTTL: 5 };
+    const previousState = {
+        lastSubject: null,
+        pendingSubject: null,
+        pendingSubjectNormalized: null,
+        sceneRoster: new Set(["kotori"]),
+        outfitRoster: new Map([["kotori", { outfit: "casual" }]]),
+        rosterTurns: new Map([["kotori", 3]]),
+        defaultRosterTTL: 5,
+        outfitTTL: 2,
+    };
+
+    state.perMessageStates.set("m0", previousState);
+
+    const { state: newState, rosterCleared } = __testables.createMessageState(profile, "m1", { messageRole: "system" });
+
+    assert.equal(rosterCleared, false, "roster should remain populated for non-assistant messages");
+    assert.ok(newState.rosterTurns instanceof Map, "roster turns should be tracked per member");
+    assert.equal(newState.rosterTurns.get("kotori"), 3, "roster turns should remain unchanged");
+    assert.equal(newState.defaultRosterTTL, 5, "default roster TTL should persist from the profile");
+    assert.equal(newState.outfitTTL, 2, "outfit TTL should remain unchanged for non-assistant messages");
+    assert.deepEqual(Array.from(newState.sceneRoster), ["kotori"]);
+});
+
 test("applySceneRosterUpdate preserves per-member TTL values", () => {
     resetSceneState();
     clearLiveTesterOutputs();
