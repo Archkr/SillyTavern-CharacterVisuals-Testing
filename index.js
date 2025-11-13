@@ -8417,7 +8417,46 @@ function confirmMessageSubject(msgState, matchedName) {
     msgState.pendingSubjectNormalized = null;
 }
 
-function createMessageState(profile, bufKey) {
+function shouldAdvanceRosterTTL(role) {
+    if (typeof role !== "string") {
+        return true;
+    }
+    const normalizedRole = role.trim().toLowerCase();
+    if (!normalizedRole) {
+        return true;
+    }
+    return normalizedRole === "assistant";
+}
+
+function resolveMessageRoleFromArgs(args) {
+    if (!Array.isArray(args) || args.length === 0) {
+        return null;
+    }
+    const visited = new Set();
+    const queue = [...args];
+    while (queue.length > 0) {
+        const value = queue.shift();
+        if (!value || typeof value !== "object") {
+            continue;
+        }
+        if (visited.has(value)) {
+            continue;
+        }
+        visited.add(value);
+        if (typeof value.role === "string" && value.role.trim()) {
+            return value.role.trim().toLowerCase();
+        }
+        if (typeof value.message === "object" && value.message !== null) {
+            queue.push(value.message);
+        }
+        if (Array.isArray(value.messages) && value.messages.length > 0) {
+            queue.push(...value.messages);
+        }
+    }
+    return null;
+}
+
+function createMessageState(profile, bufKey, options = {}) {
     if (!profile || !bufKey) {
         return { state: null, initialized: false, rosterCleared: false, key: null };
     }
@@ -8471,6 +8510,7 @@ function createMessageState(profile, bufKey) {
     }
 
     const profileTTL = sanitizeRosterTurnValue(profile?.sceneRosterTTL ?? PROFILE_DEFAULTS.sceneRosterTTL);
+    const advanceRosterTTL = shouldAdvanceRosterTTL(options?.messageRole);
     const previousTurns = oldState?.rosterTurns instanceof Map ? oldState.rosterTurns : null;
     const rosterTurns = new Map();
     const expiredMembers = [];
@@ -8480,6 +8520,10 @@ function createMessageState(profile, bufKey) {
             const normalized = normalizeRosterKey(key);
             const sanitized = sanitizeRosterTurnValue(value);
             if (!normalized || sanitized == null) {
+                return;
+            }
+            if (!advanceRosterTTL) {
+                rosterTurns.set(normalized, sanitized);
                 return;
             }
             const next = sanitized - 1;
@@ -8498,6 +8542,10 @@ function createMessageState(profile, bufKey) {
             }
             if (fallback == null) {
                 expiredMembers.push(normalized);
+                return;
+            }
+            if (!advanceRosterTTL) {
+                rosterTurns.set(normalized, fallback);
                 return;
             }
             const next = fallback - 1;
@@ -8539,7 +8587,7 @@ function createMessageState(profile, bufKey) {
         debugLog(`Scene roster TTL expired for ${expiredMembers.join(', ')}, removing from roster.`);
     }
 
-    if (newState.outfitRoster.size > 0 && Number.isFinite(newState.outfitTTL)) {
+    if (advanceRosterTTL && newState.outfitRoster.size > 0 && Number.isFinite(newState.outfitTTL)) {
         newState.outfitTTL -= 1;
         if (newState.outfitTTL <= 0) {
             const expired = Array.from(newState.outfitRoster.keys());
@@ -8744,7 +8792,8 @@ const handleGenerationStart = (...args) => {
 
     const profile = getActiveProfile();
     if (profile) {
-        const { state: msgState, rosterCleared } = createMessageState(profile, normalizedKey);
+        const messageRole = resolveMessageRoleFromArgs(args);
+        const { state: msgState, rosterCleared } = createMessageState(profile, normalizedKey, { messageRole });
         if (rosterCleared && msgState) {
             applySceneRosterUpdate({
                 key: normalizedKey,
@@ -8813,7 +8862,7 @@ const handleStream = (...args) => {
 
         let msgState = state.perMessageStates.get(bufKey);
         if (!msgState) {
-            const { state: createdState, rosterCleared } = createMessageState(profile, bufKey);
+            const { state: createdState, rosterCleared } = createMessageState(profile, bufKey, { messageRole: "assistant" });
             msgState = createdState;
             if (rosterCleared && msgState) {
                 const normalized = normalizeMessageKey(bufKey) || bufKey;
