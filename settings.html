@@ -631,102 +631,134 @@
 </div>
 
 <script>
-    (function generateOrganicFlowAmbient() {
+    (function initHeaderRippleAmbient() {
         const ambient = document.querySelector("#costume-switcher-settings.cs-theme .cs-header-ambient");
 
-        if (!ambient || ambient.dataset.flowInitialized === "true") {
+        if (!ambient || ambient.dataset.ripplesInitialized === "true") {
             return;
         }
 
-        ambient.dataset.flowInitialized = "true";
+        ambient.dataset.ripplesInitialized = "true";
 
-        const randomBetween = (min, max) => Math.random() * (max - min) + min;
-        const flowCount = 6;
-        let resizeFrameId = 0;
+        ambient.textContent = "";
 
-        const populateAmbient = () => {
-            ambient.innerHTML = "";
+        const rippleBlueprints = [
+            {
+                sizeRatio: 1.28,
+                left: 34,
+                top: 60,
+                duration: 28,
+                delay: 0,
+                scaleStart: 0.48,
+                scaleEnd: 1.34,
+                opacity: 0.4,
+                blur: 14,
+            },
+            {
+                sizeRatio: 1.58,
+                left: 58,
+                top: 46,
+                duration: 36,
+                delay: -12.5,
+                scaleStart: 0.42,
+                scaleEnd: 1.46,
+                opacity: 0.34,
+                blur: 18,
+            },
+            {
+                sizeRatio: 0.9,
+                left: 24,
+                top: 40,
+                duration: 24,
+                delay: -6.8,
+                scaleStart: 0.36,
+                scaleEnd: 1.22,
+                opacity: 0.38,
+                blur: 10,
+            },
+            {
+                sizeRatio: 0.66,
+                left: 70,
+                top: 70,
+                duration: 32,
+                delay: -18,
+                scaleStart: 0.44,
+                scaleEnd: 1.28,
+                opacity: 0.32,
+                blur: 12,
+            },
+        ];
 
-            const referenceHeight = ambient.offsetHeight || 240;
-            const minSize = Math.max(referenceHeight * 0.45, 120);
-            const maxSize = Math.max(referenceHeight * 0.75, 180);
-            const placements = [];
+        const sparkBlueprints = [
+            {
+                sizeRatio: 0.54,
+                left: 60,
+                top: 52,
+                duration: 16,
+                delay: -6.2,
+                opacity: 0.42,
+            },
+            {
+                sizeRatio: 0.38,
+                left: 38,
+                top: 34,
+                duration: 14,
+                delay: -9.6,
+                opacity: 0.28,
+            },
+        ];
 
-            const scoreCandidate = (leftPercent, topPercent, influenceRadius) => {
-                if (!placements.length) {
-                    return Infinity;
-                }
+        const ripples = rippleBlueprints.map((blueprint) => {
+            const layer = document.createElement("div");
+            layer.className = "ripple-layer";
+            layer.dataset.sizeRatio = String(blueprint.sizeRatio);
+            layer.style.setProperty("--ripple-left", `${blueprint.left}%`);
+            layer.style.setProperty("--ripple-top", `${blueprint.top}%`);
+            layer.style.setProperty("--ripple-duration", `${blueprint.duration}s`);
+            layer.style.setProperty("--ripple-delay", `${blueprint.delay}s`);
+            layer.style.setProperty("--ripple-scale-start", `${blueprint.scaleStart}`);
+            layer.style.setProperty("--ripple-scale-end", `${blueprint.scaleEnd}`);
+            layer.style.setProperty("--ripple-opacity", `${blueprint.opacity}`);
+            layer.style.setProperty("--ripple-blur", `${blueprint.blur}px`);
+            ambient.appendChild(layer);
+            return { element: layer, blueprint };
+        });
 
-                return placements.reduce((closest, { left, top, influence }) => {
-                    const dx = leftPercent - left;
-                    const dy = topPercent - top;
-                    const distance = Math.hypot(dx, dy);
-                    const bufferedDistance = distance - Math.max(influenceRadius, influence);
-                    return Math.min(closest, bufferedDistance);
-                }, Infinity);
-            };
+        const sparks = sparkBlueprints.map((blueprint) => {
+            const spark = document.createElement("div");
+            spark.className = "ripple-spark";
+            spark.dataset.sizeRatio = String(blueprint.sizeRatio);
+            spark.style.setProperty("--spark-left", `${blueprint.left}%`);
+            spark.style.setProperty("--spark-top", `${blueprint.top}%`);
+            spark.style.setProperty("--spark-duration", `${blueprint.duration}s`);
+            spark.style.setProperty("--spark-delay", `${blueprint.delay}s`);
+            spark.style.setProperty("--spark-opacity", `${blueprint.opacity}`);
+            ambient.appendChild(spark);
+            return { element: spark, blueprint };
+        });
 
-            for (let index = 0; index < flowCount; index += 1) {
-                const flow = document.createElement("div");
-                flow.className = "flow-element";
+        const updateDimensions = () => {
+            const { width, height } = ambient.getBoundingClientRect();
+            const reference = Math.max(width, height, 1);
 
-                const size = randomBetween(minSize, maxSize);
-                flow.style.width = `${size}px`;
-                flow.style.height = `${size}px`;
-                flow.style.animationDelay = `${randomBetween(0, 8)}s`;
+            ripples.forEach(({ element, blueprint }) => {
+                const baseSize = reference * blueprint.sizeRatio;
+                element.style.setProperty("--ripple-size", `${baseSize}px`);
+            });
 
-                const influenceRadius = Math.max(18, (size / Math.max(referenceHeight, 1)) * 55);
-                const maxAttempts = 24;
-                let bestPlacement = null;
-                let bestScore = -Infinity;
-
-                for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-                    const leftPercent = randomBetween(8, 92);
-                    const topPercent = randomBetween(-10, 110);
-                    const score = scoreCandidate(leftPercent, topPercent, influenceRadius);
-
-                    if (score > bestScore) {
-                        bestScore = score;
-                        bestPlacement = { leftPercent, topPercent };
-                    }
-
-                    if (score >= influenceRadius) {
-                        break;
-                    }
-                }
-
-                if (!bestPlacement) {
-                    bestPlacement = { leftPercent: randomBetween(12, 88), topPercent: randomBetween(-5, 105) };
-                }
-
-                placements.push({
-                    left: bestPlacement.leftPercent,
-                    top: bestPlacement.topPercent,
-                    influence: influenceRadius,
-                });
-
-                flow.style.left = `${bestPlacement.leftPercent}%`;
-                flow.style.top = `${bestPlacement.topPercent}%`;
-
-                ambient.appendChild(flow);
-            }
+            sparks.forEach(({ element, blueprint }) => {
+                const baseSize = reference * blueprint.sizeRatio;
+                element.style.setProperty("--spark-size", `${baseSize}px`);
+            });
         };
 
-        const schedulePopulate = () => {
-            if (resizeFrameId) {
-                cancelAnimationFrame(resizeFrameId);
-            }
-
-            resizeFrameId = requestAnimationFrame(populateAmbient);
-        };
-
-        populateAmbient();
+        updateDimensions();
 
         if (typeof ResizeObserver === "function") {
-            const observer = new ResizeObserver(schedulePopulate);
+            const observer = new ResizeObserver(updateDimensions);
             observer.observe(ambient);
         } else {
-            window.addEventListener("resize", schedulePopulate, { passive: true });
+            window.addEventListener("resize", updateDimensions, { passive: true });
         }
     })();
 </script>
