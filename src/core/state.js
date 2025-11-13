@@ -86,6 +86,7 @@ function cloneRosterEntry(entry) {
         normalized: entry.normalized,
         joinedAt: entry.joinedAt,
         lastSeenAt: entry.lastSeenAt,
+        lastLeftAt: entry.lastLeftAt,
         turnsRemaining: Number.isFinite(entry.turnsRemaining) ? entry.turnsRemaining : null,
     };
 }
@@ -189,6 +190,7 @@ export function applySceneRosterUpdate({
         let providedName = null;
         let providedJoinedAt = null;
         let providedLastSeenAt = null;
+        let providedLastLeftAt = null;
         let providedTurns = null;
         if (value && typeof value === "object") {
             if (typeof value.normalized === "string" && value.normalized.trim()) {
@@ -204,6 +206,9 @@ export function applySceneRosterUpdate({
             }
             if (Number.isFinite(value.lastSeenAt)) {
                 providedLastSeenAt = value.lastSeenAt;
+            }
+            if (Number.isFinite(value.lastLeftAt)) {
+                providedLastLeftAt = value.lastLeftAt;
             }
             if (Number.isFinite(value.turnsRemaining)) {
                 providedTurns = Math.max(0, Math.floor(value.turnsRemaining));
@@ -221,7 +226,8 @@ export function applySceneRosterUpdate({
         const name = providedName || resolveDisplayName(normalized, normalizedDisplayNames);
         const existing = rosterMembers.get(normalized);
         const joinedAt = providedJoinedAt ?? existing?.joinedAt ?? updatedAt;
-        const lastSeenAt = providedLastSeenAt ?? updatedAt;
+        const lastSeenAt = providedLastSeenAt ?? existing?.lastSeenAt ?? updatedAt;
+        const lastLeftAt = providedLastLeftAt ?? existing?.lastLeftAt ?? null;
         let entryTurns = providedTurns;
         if (!Number.isFinite(entryTurns) && perMemberTurns?.has(normalized)) {
             entryTurns = perMemberTurns.get(normalized);
@@ -234,6 +240,7 @@ export function applySceneRosterUpdate({
             normalized,
             joinedAt,
             lastSeenAt,
+            lastLeftAt,
             turnsRemaining: Number.isFinite(entryTurns) ? entryTurns : null,
         });
     });
@@ -257,7 +264,7 @@ export function applySceneRosterUpdate({
             normalized: entry.normalized,
             joinedAt: rosterMembers.get(entry.normalized)?.joinedAt ?? entry.joinedAt,
             lastSeenAt: entry.lastSeenAt,
-            lastLeftAt: null,
+            lastLeftAt: Number.isFinite(entry.lastLeftAt) ? entry.lastLeftAt : null,
             active: true,
             turnsRemaining: entry.turnsRemaining,
         });

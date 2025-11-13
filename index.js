@@ -2413,11 +2413,13 @@ function syncSceneRosterFromMembership({ message } = {}) {
                 : null;
             const joinedAt = Number.isFinite(member.joinedAt) ? member.joinedAt : null;
             const lastSeenAt = Number.isFinite(member.lastSeenAt) ? member.lastSeenAt : null;
+            const lastLeftAt = Number.isFinite(member.lastLeftAt) ? member.lastLeftAt : null;
             return {
                 name: member.name || member.normalized || normalized,
                 normalized,
                 joinedAt,
                 lastSeenAt,
+                lastLeftAt,
                 turnsRemaining,
             };
         })
