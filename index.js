@@ -897,6 +897,18 @@ function findAllMatches(combined, options = {}) {
         detectionOptions.minIndex = Math.floor(options.minIndex);
     }
 
+    if (Number.isFinite(options?.bufferOffset) && options.bufferOffset >= 0) {
+        detectionOptions.bufferOffset = Math.floor(options.bufferOffset);
+    }
+
+    if (typeof options?.quoteState === "object" && options.quoteState) {
+        detectionOptions.quoteState = options.quoteState;
+    }
+
+    if (Number.isFinite(options?.lastIndex)) {
+        detectionOptions.lastIndex = Math.floor(options.lastIndex);
+    }
+
     return collectDetections(combined, profile, compiledRegexes, detectionOptions);
 }
 
@@ -6527,6 +6539,7 @@ function adjustWindowForTrim(msgState, trimmedChars, combinedLength) {
 
     if (Number.isFinite(trimmedChars) && trimmedChars > 0) {
         msgState.bufferOffset += trimmedChars;
+        shiftDetectionContext(msgState, msgState.bufferOffset);
     }
 
     if (Number.isFinite(combinedLength) && combinedLength >= 0) {
@@ -6553,6 +6566,7 @@ function createTesterMessageState(profile) {
         processedLength: 0,
         lastAcceptedIndex: -1,
         bufferOffset: 0,
+        detectionContext: createDetectionContext(0),
     };
 }
 
@@ -8014,14 +8028,164 @@ function summarizeMatches(matches) {
     return stats;
 }
 
-function ensureMatchCache(normalizedKey) {
+function createDetectionContext(bufferOffset = 0) {
+    const offset = Number.isFinite(bufferOffset) ? Math.max(0, Math.floor(bufferOffset)) : 0;
+    return {
+        lastProcessedAbsolute: offset - 1,
+        quoteState: {
+            ranges: [],
+            stack: [],
+            windowOffset: offset,
+            lastIndex: offset - 1,
+        },
+        matchCache: {
+            matches: [],
+            processedAbsolute: offset - 1,
+            windowOffset: offset,
+        },
+        metrics: {
+            incrementalRuns: 0,
+            incrementalChars: 0,
+            fullRuns: 0,
+            fullChars: 0,
+        },
+    };
+}
+
+function ensureDetectionContext(msgState, bufferOffset = 0) {
+    if (!msgState || typeof msgState !== "object") {
+        return null;
+    }
+    const offset = Number.isFinite(bufferOffset) ? Math.max(0, Math.floor(bufferOffset)) : 0;
+    if (!msgState.detectionContext || typeof msgState.detectionContext !== "object") {
+        msgState.detectionContext = createDetectionContext(offset);
+        return msgState.detectionContext;
+    }
+
+    const context = msgState.detectionContext;
+
+    if (!context.quoteState || typeof context.quoteState !== "object") {
+        context.quoteState = createDetectionContext(offset).quoteState;
+    }
+    if (!Array.isArray(context.quoteState.ranges)) {
+        context.quoteState.ranges = [];
+    }
+    if (!Array.isArray(context.quoteState.stack)) {
+        context.quoteState.stack = [];
+    }
+    context.quoteState.windowOffset = Number.isFinite(context.quoteState.windowOffset)
+        ? Math.max(0, Math.floor(context.quoteState.windowOffset))
+        : offset;
+    if (!Number.isFinite(context.quoteState.lastIndex)) {
+        context.quoteState.lastIndex = context.quoteState.windowOffset - 1;
+    }
+
+    if (!context.matchCache || typeof context.matchCache !== "object") {
+        context.matchCache = createDetectionContext(offset).matchCache;
+    }
+    if (!Array.isArray(context.matchCache.matches)) {
+        context.matchCache.matches = [];
+    }
+    context.matchCache.windowOffset = Number.isFinite(context.matchCache.windowOffset)
+        ? Math.max(0, Math.floor(context.matchCache.windowOffset))
+        : offset;
+    if (!Number.isFinite(context.matchCache.processedAbsolute)) {
+        context.matchCache.processedAbsolute = context.matchCache.windowOffset - 1;
+    }
+
+    if (!context.metrics || typeof context.metrics !== "object") {
+        context.metrics = createDetectionContext(offset).metrics;
+    }
+    const metrics = context.metrics;
+    if (!Number.isFinite(metrics.incrementalRuns)) {
+        metrics.incrementalRuns = 0;
+    }
+    if (!Number.isFinite(metrics.incrementalChars)) {
+        metrics.incrementalChars = 0;
+    }
+    if (!Number.isFinite(metrics.fullRuns)) {
+        metrics.fullRuns = 0;
+    }
+    if (!Number.isFinite(metrics.fullChars)) {
+        metrics.fullChars = 0;
+    }
+    if (!Number.isFinite(context.lastProcessedAbsolute)) {
+        context.lastProcessedAbsolute = context.matchCache.processedAbsolute;
+    }
+
+    return context;
+}
+
+function shiftDetectionContext(msgState, newBufferOffset) {
+    const context = ensureDetectionContext(msgState, newBufferOffset);
+    if (!context) {
+        return;
+    }
+    const offset = Number.isFinite(newBufferOffset) ? Math.max(0, Math.floor(newBufferOffset)) : 0;
+
+    if (context.matchCache && Array.isArray(context.matchCache.matches)) {
+        context.matchCache.matches = context.matchCache.matches.filter((match) => {
+            if (!match || !Number.isFinite(match.absoluteIndex)) {
+                return true;
+            }
+            return match.absoluteIndex >= offset;
+        });
+        if (!Number.isFinite(context.matchCache.processedAbsolute) || context.matchCache.processedAbsolute < offset - 1) {
+            context.matchCache.processedAbsolute = offset - 1;
+        }
+        context.matchCache.windowOffset = offset;
+    }
+
+    if (context.quoteState) {
+        if (!Array.isArray(context.quoteState.ranges)) {
+            context.quoteState.ranges = [];
+        } else {
+            context.quoteState.ranges = context.quoteState.ranges.filter((range) => {
+                if (!Array.isArray(range) || range.length < 2) {
+                    return false;
+                }
+                const [, end] = range;
+                return Number.isFinite(end) ? end >= offset : true;
+            });
+        }
+        if (!Array.isArray(context.quoteState.stack)) {
+            context.quoteState.stack = [];
+        } else {
+            context.quoteState.stack = context.quoteState.stack.filter((frame) => {
+                if (!frame || !Number.isFinite(frame.index)) {
+                    return false;
+                }
+                return frame.index >= offset;
+            });
+        }
+        context.quoteState.windowOffset = offset;
+        if (!Number.isFinite(context.quoteState.lastIndex) || context.quoteState.lastIndex < offset - 1) {
+            context.quoteState.lastIndex = offset - 1;
+        }
+    }
+
+    if (!Number.isFinite(context.lastProcessedAbsolute) || context.lastProcessedAbsolute < offset - 1) {
+        context.lastProcessedAbsolute = offset - 1;
+    }
+}
+
+function ensureMatchCache(normalizedKey, messageState = null) {
     if (!(state.messageMatches instanceof Map)) {
         state.messageMatches = new Map();
     }
 
+    if (messageState) {
+        const context = ensureDetectionContext(messageState, messageState.bufferOffset || 0);
+        if (context?.matchCache) {
+            state.messageMatches.set(normalizedKey, context.matchCache);
+            return context.matchCache;
+        }
+    }
+
     let cache = state.messageMatches.get(normalizedKey);
     if (!cache || typeof cache !== "object" || !Array.isArray(cache.matches)) {
-        cache = { matches: [], processedAbsolute: -1 };
+        const fallbackContext = createDetectionContext(0);
+        cache = fallbackContext.matchCache;
         state.messageMatches.set(normalizedKey, cache);
     }
     return cache;
@@ -8098,6 +8262,49 @@ function projectMatchesForBuffer(cache, bufferOffset, textLength) {
         });
 }
 
+function areStatsEqual(previousStats, nextStats) {
+    const prev = previousStats instanceof Map ? previousStats : new Map();
+    const next = nextStats instanceof Map ? nextStats : new Map();
+    if (prev.size !== next.size) {
+        return false;
+    }
+    for (const [key, value] of prev.entries()) {
+        if (next.get(key) !== value) {
+            return false;
+        }
+    }
+    return true;
+}
+
+function areRankingsEqual(previousRanking, nextRanking) {
+    const prev = Array.isArray(previousRanking) ? previousRanking : [];
+    const next = Array.isArray(nextRanking) ? nextRanking : [];
+    if (prev.length !== next.length) {
+        return false;
+    }
+    const keys = [
+        "name",
+        "normalized",
+        "count",
+        "bestPriority",
+        "earliest",
+        "latest",
+        "inSceneRoster",
+        "firstMatchKind",
+        "score",
+    ];
+    for (let i = 0; i < prev.length; i += 1) {
+        const a = prev[i] || {};
+        const b = next[i] || {};
+        for (const key of keys) {
+            if ((a[key] ?? null) !== (b[key] ?? null)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 function updateMessageAnalytics(bufKey, text, options = {}) {
     const {
         rosterSet,
@@ -8107,6 +8314,7 @@ function updateMessageAnalytics(bufKey, text, options = {}) {
         incremental = false,
         startIndex = null,
         previousProcessedAbsolute = null,
+        messageState = null,
     } = options;
 
     const normalizedKey = bufKey ? (normalizeMessageKey(bufKey) || bufKey) : bufKey;
@@ -8122,29 +8330,72 @@ function updateMessageAnalytics(bufKey, text, options = {}) {
         state.topSceneRanking = new Map();
     }
 
-    const normalizedText = typeof text === 'string' ? (assumeNormalized ? text : normalizeStreamText(text)) : '';
+    const normalizedText = typeof text === "string" ? (assumeNormalized ? text : normalizeStreamText(text)) : "";
     const profile = getActiveProfile();
     const bufferOffset = Number.isFinite(explicitBufferOffset) ? Math.max(0, Math.floor(explicitBufferOffset)) : 0;
-    const cache = ensureMatchCache(normalizedKey);
+    const context = messageState ? ensureDetectionContext(messageState, bufferOffset) : null;
+    const cache = ensureMatchCache(normalizedKey, messageState);
 
     const textLength = normalizedText.length;
+    const explicitMinIndex = Number.isFinite(options?.minIndex) && options.minIndex >= 0
+        ? Math.max(0, Math.floor(options.minIndex))
+        : null;
 
-    if (!incremental) {
-        const matches = normalizedText ? findAllMatches(normalizedText) : [];
+    if (!incremental || !context) {
+        const detectionOptions = {};
+        if (explicitMinIndex != null) {
+            detectionOptions.minIndex = explicitMinIndex;
+        }
+        if (context?.quoteState) {
+            detectionOptions.quoteState = context.quoteState;
+            detectionOptions.bufferOffset = bufferOffset;
+            detectionOptions.lastIndex = context.lastProcessedAbsolute;
+        }
+        const matches = normalizedText
+            ? findAllMatches(normalizedText, detectionOptions)
+            : [];
         cache.matches = matches.map((match) => normalizeMatchForCache(match, bufferOffset));
-        cache.processedAbsolute = textLength > 0
+        const absoluteTail = textLength > 0
             ? bufferOffset + textLength - 1
             : bufferOffset - 1;
+        cache.processedAbsolute = absoluteTail;
+        if (context) {
+            context.lastProcessedAbsolute = absoluteTail;
+            if (textLength > 0) {
+                context.metrics.fullRuns += 1;
+                context.metrics.fullChars += textLength;
+            }
+        }
     } else if (normalizedText) {
-        const relativeStart = Number.isFinite(startIndex) && startIndex >= 0
+        const resumeRelative = Number.isFinite(context.lastProcessedAbsolute)
+            ? Math.max(0, context.lastProcessedAbsolute + 1 - bufferOffset)
+            : 0;
+        const requestedStart = Number.isFinite(startIndex) && startIndex >= 0
             ? Math.min(Math.floor(startIndex), textLength)
-            : textLength;
-        const minIndex = Number.isFinite(relativeStart) ? relativeStart : 0;
-        const processedBoundary = Number.isFinite(cache.processedAbsolute)
-            ? cache.processedAbsolute
-            : (Number.isFinite(previousProcessedAbsolute) ? previousProcessedAbsolute : bufferOffset + minIndex - 1);
-        const scanStartIndex = Math.max(0, minIndex - INCREMENTAL_SCAN_PADDING);
-        const newMatches = findAllMatches(normalizedText, { startIndex: scanStartIndex, minIndex });
+            : 0;
+        const relativeStart = Math.min(textLength, Math.max(resumeRelative, requestedStart));
+        const effectiveMinIndex = explicitMinIndex != null
+            ? Math.max(explicitMinIndex, relativeStart)
+            : relativeStart;
+        const scanStartIndex = Math.max(0, relativeStart - INCREMENTAL_SCAN_PADDING);
+        const detectionOptions = {
+            startIndex: scanStartIndex,
+            minIndex: effectiveMinIndex,
+        };
+        if (context?.quoteState) {
+            detectionOptions.quoteState = context.quoteState;
+            detectionOptions.lastIndex = context.lastProcessedAbsolute;
+            detectionOptions.bufferOffset = bufferOffset;
+        }
+        const newMatches = findAllMatches(normalizedText, detectionOptions);
+        const processedBoundary = Number.isFinite(context.lastProcessedAbsolute)
+            ? context.lastProcessedAbsolute
+            : (Number.isFinite(cache.processedAbsolute)
+                ? cache.processedAbsolute
+                : (Number.isFinite(previousProcessedAbsolute)
+                    ? previousProcessedAbsolute
+                    : bufferOffset + relativeStart - 1));
+        const inserted = [];
         newMatches
             .map((match) => normalizeMatchForCache(match, bufferOffset))
             .forEach((match) => {
@@ -8153,18 +8404,39 @@ function updateMessageAnalytics(bufKey, text, options = {}) {
                     return;
                 }
                 cache.matches.push(match);
+                inserted.push(match);
             });
-        cache.matches.sort((a, b) => {
-            const aIndex = Number.isFinite(a.absoluteIndex) ? a.absoluteIndex : Number.POSITIVE_INFINITY;
-            const bIndex = Number.isFinite(b.absoluteIndex) ? b.absoluteIndex : Number.POSITIVE_INFINITY;
-            return aIndex - bIndex;
-        });
-        cache.processedAbsolute = textLength > 0
+        if (inserted.length > 0 && cache.matches.length > 1) {
+            cache.matches.sort((a, b) => {
+                const aIndex = Number.isFinite(a.absoluteIndex) ? a.absoluteIndex : Number.POSITIVE_INFINITY;
+                const bIndex = Number.isFinite(b.absoluteIndex) ? b.absoluteIndex : Number.POSITIVE_INFINITY;
+                return aIndex - bIndex;
+            });
+        }
+        const newAbsoluteTail = textLength > 0
             ? bufferOffset + textLength - 1
             : bufferOffset - 1;
+        const previousProcessed = Number.isFinite(cache.processedAbsolute)
+            ? cache.processedAbsolute
+            : bufferOffset - 1;
+        cache.processedAbsolute = Math.max(previousProcessed, newAbsoluteTail);
+        context.lastProcessedAbsolute = Math.max(
+            Number.isFinite(context.lastProcessedAbsolute) ? context.lastProcessedAbsolute : newAbsoluteTail,
+            newAbsoluteTail,
+        );
+        const scannedChars = Math.max(0, textLength - relativeStart);
+        if (scannedChars > 0) {
+            context.metrics.incrementalRuns += 1;
+            context.metrics.incrementalChars += scannedChars;
+        }
     }
 
-    state.messageStats.set(normalizedKey, summarizeMatches(cache.matches));
+    const nextStats = summarizeMatches(cache.matches);
+    const previousStats = state.messageStats.get(normalizedKey);
+    const statsChanged = !areStatsEqual(previousStats, nextStats);
+    if (statsChanged || !(previousStats instanceof Map)) {
+        state.messageStats.set(normalizedKey, nextStats);
+    }
 
     const visibleMatches = projectMatchesForBuffer(cache, bufferOffset, textLength);
 
@@ -8175,24 +8447,37 @@ function updateMessageAnalytics(bufKey, text, options = {}) {
         rosterBonus: resolveNumericSetting(profile?.rosterBonus, PROFILE_DEFAULTS.rosterBonus),
         priorityMultiplier: 100,
     });
-    state.topSceneRanking.set(normalizedKey, ranking);
+    const previousRanking = state.topSceneRanking.get(normalizedKey) || [];
+    const rankingChanged = !areRankingsEqual(previousRanking, ranking);
+    if (rankingChanged || !Array.isArray(previousRanking)) {
+        state.topSceneRanking.set(normalizedKey, ranking);
+    }
 
     const timestamp = Date.now();
     if (!(state.topSceneRankingUpdatedAt instanceof Map)) {
         state.topSceneRankingUpdatedAt = new Map();
     }
-    state.topSceneRankingUpdatedAt.set(normalizedKey, timestamp);
-
-    if (updateSession !== false) {
-        updateSessionTopCharacters(normalizedKey, ranking, timestamp);
-    } else if (state.latestTopRanking?.bufKey && normalizeMessageKey(state.latestTopRanking.bufKey) === normalizedKey) {
+    if (rankingChanged) {
+        state.topSceneRankingUpdatedAt.set(normalizedKey, timestamp);
+        if (updateSession !== false) {
+            updateSessionTopCharacters(normalizedKey, ranking, timestamp);
+        } else if (state.latestTopRanking?.bufKey && normalizeMessageKey(state.latestTopRanking.bufKey) === normalizedKey) {
+            state.latestTopRanking.updatedAt = timestamp;
+        }
+    } else if (updateSession === false && state.latestTopRanking?.bufKey && normalizeMessageKey(state.latestTopRanking.bufKey) === normalizedKey) {
         state.latestTopRanking.updatedAt = timestamp;
     }
 
-    requestScenePanelRender("analytics-update");
+    if (statsChanged || rankingChanged) {
+        requestScenePanelRender("analytics-update");
+    }
+
+    const statsResult = statsChanged ? nextStats : (previousStats instanceof Map ? previousStats : nextStats);
+    const rankingResult = rankingChanged ? ranking : previousRanking;
+
     return {
-        stats: state.messageStats.get(normalizedKey) || new Map(),
-        ranking,
+        stats: statsResult,
+        ranking: rankingResult,
         matches: visibleMatches,
     };
 }
@@ -8266,7 +8551,7 @@ function calculateFinalMessageStats(reference) {
 
     const msgState = state.perMessageStates.get(normalizedKey);
     const rosterSet = msgState?.sceneRoster instanceof Set ? msgState.sceneRoster : null;
-    updateMessageAnalytics(normalizedKey, fullText, { rosterSet, assumeNormalized: true });
+    updateMessageAnalytics(normalizedKey, fullText, { rosterSet, assumeNormalized: true, messageState: msgState });
 
     debugLog("Final stats calculated for", normalizedKey, state.messageStats.get(normalizedKey));
     requestScenePanelRender("final-stats", { immediate: true });
@@ -8526,7 +8811,14 @@ function restoreSceneOutcomeForMessage(message, {
         state.messageStats = new Map();
     }
 
-    updateMessageAnalytics(messageKey, buffer, { rosterSet: new Set(roster), assumeNormalized: true });
+    const restoredMessageState = state.perMessageStates instanceof Map
+        ? state.perMessageStates.get(messageKey)
+        : null;
+    updateMessageAnalytics(messageKey, buffer, {
+        rosterSet: new Set(roster),
+        assumeNormalized: true,
+        messageState: restoredMessageState,
+    });
     if (Array.isArray(stored?.stats) && stored.stats.length) {
         state.messageStats.set(messageKey, fromStatsEntries(stored.stats));
     }
@@ -9308,6 +9600,7 @@ const handleStream = (...args) => {
             previousProcessedAbsolute: Number.isFinite(previousProcessedLength)
                 ? previousProcessedLength - 1
                 : null,
+            messageState: msgState,
         });
 
         let minIndexRelative = null;
@@ -9861,6 +10154,7 @@ export {
     getVerbInflections,
     getWinner,
     findBestMatch,
+    updateMessageAnalytics,
     adjustWindowForTrim,
     simulateTesterStream,
     buildVariantFolderPath,
