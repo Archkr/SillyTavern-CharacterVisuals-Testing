@@ -8,7 +8,7 @@ export async function resolve(specifier, context, defaultResolve) {
     if (specifier === "../../../slash-commands.js") {
         return { url: "node:mock/slash", shortCircuit: true };
     }
-    if (specifier === "../regex/engine.js" || specifier === "../../regex/engine.js") {
+    if (specifier === "../regex/engine.js" || specifier === "../../regex/engine.js" || specifier === "../../../../regex/engine.js") {
         return { url: "node:mock/regex-engine", shortCircuit: true };
     }
     return defaultResolve(specifier, context, defaultResolve);
