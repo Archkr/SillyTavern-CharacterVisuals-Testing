@@ -34,6 +34,18 @@ function isHTMLElement(node) {
     return typeof HTMLElement !== "undefined" && node instanceof HTMLElement;
 }
 
+function applyScenePanelSummonInlineStyles(button) {
+    if (!button || !button.style) {
+        return;
+    }
+    try {
+        button.style.setProperty("display", "inline-flex", "important");
+        button.style.setProperty("visibility", "visible", "important");
+        button.style.setProperty("opacity", "1", "important");
+    } catch (err) {
+    }
+}
+
 function getScenePanelSummonParent() {
     if (typeof document === "undefined") {
         return null;
@@ -63,6 +75,7 @@ function restoreScenePanelSummonButton() {
         if (!button.classList.contains("cs-scene-panel__summon")) {
             button.classList.add("cs-scene-panel__summon");
         }
+        applyScenePanelSummonInlineStyles(button);
         updateScenePanelSummonVisibility(lastScenePanelSummonState.enabled, {
             collapsed: lastScenePanelSummonState.collapsed,
         });
@@ -255,14 +268,7 @@ function updateScenePanelSummonVisibility(enabled, { collapsed = false } = {}) {
     button.hidden = false;
     button.removeAttribute("hidden");
     button.removeAttribute("aria-hidden");
-    if (button.style) {
-        try {
-            button.style.setProperty("display", "inline-flex", "important");
-            button.style.setProperty("visibility", "visible", "important");
-            button.style.setProperty("opacity", "1", "important");
-        } catch (err) {
-        }
-    }
+    applyScenePanelSummonInlineStyles(button);
     button.setAttribute("aria-pressed", enabled ? "true" : "false");
     button.setAttribute("aria-label", enabled ? "Hide scene panel" : "Show scene panel");
     button.title = enabled ? "Hide scene panel" : "Show scene panel";
