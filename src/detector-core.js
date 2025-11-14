@@ -132,49 +132,100 @@ function gatherProfilePatterns(profile) {
     return result;
 }
 
-export function getQuoteRanges(text) {
-    if (!text) {
+const QUOTE_PAIRS = [
+    { open: "\"", close: "\"", symmetric: true },
+    { open: "＂", close: "＂", symmetric: true },
+    { open: "“", close: "”" },
+    { open: "„", close: "”" },
+    { open: "‟", close: "”" },
+    { open: "«", close: "»" },
+    { open: "‹", close: "›" },
+    { open: "「", close: "」" },
+    { open: "『", close: "』" },
+    { open: "｢", close: "｣" },
+    { open: "《", close: "》" },
+    { open: "〈", close: "〉" },
+    { open: "﹁", close: "﹂" },
+    { open: "﹃", close: "﹄" },
+    { open: "〝", close: "〞" },
+    { open: "‘", close: "’" },
+    { open: "‚", close: "’" },
+    { open: "‛", close: "’" },
+    { open: "'", close: "'", symmetric: true, apostropheSensitive: true },
+];
+
+const QUOTE_OPENERS = new Map();
+const QUOTE_CLOSERS = new Map();
+
+QUOTE_PAIRS.forEach((pair) => {
+    const info = {
+        close: pair.close,
+        symmetric: Boolean(pair.symmetric),
+        apostropheSensitive: Boolean(pair.apostropheSensitive),
+    };
+    QUOTE_OPENERS.set(pair.open, info);
+    if (info.symmetric) {
+        return;
+    }
+    if (!QUOTE_CLOSERS.has(pair.close)) {
+        QUOTE_CLOSERS.set(pair.close, []);
+    }
+    QUOTE_CLOSERS.get(pair.close).push(pair.open);
+});
+
+function createQuoteState(bufferOffset = 0) {
+    const offset = Number.isFinite(bufferOffset) ? Math.max(0, Math.floor(bufferOffset)) : 0;
+    return {
+        ranges: [],
+        stack: [],
+        windowOffset: offset,
+        lastIndex: offset - 1,
+    };
+}
+
+function projectQuoteRanges(state, bufferOffset, textLength) {
+    if (!state || !Array.isArray(state.ranges)) {
         return [];
     }
-    const ranges = [];
-    const stack = [];
-    const QUOTE_PAIRS = [
-        { open: "\"", close: "\"", symmetric: true },
-        { open: "＂", close: "＂", symmetric: true },
-        { open: "“", close: "”" },
-        { open: "„", close: "”" },
-        { open: "‟", close: "”" },
-        { open: "«", close: "»" },
-        { open: "‹", close: "›" },
-        { open: "「", close: "」" },
-        { open: "『", close: "』" },
-        { open: "｢", close: "｣" },
-        { open: "《", close: "》" },
-        { open: "〈", close: "〉" },
-        { open: "﹁", close: "﹂" },
-        { open: "﹃", close: "﹄" },
-        { open: "〝", close: "〞" },
-        { open: "‘", close: "’" },
-        { open: "‚", close: "’" },
-        { open: "‛", close: "’" },
-        { open: "'", close: "'", symmetric: true, apostropheSensitive: true },
-    ];
-    const QUOTE_OPENERS = new Map();
-    const QUOTE_CLOSERS = new Map();
-    for (const pair of QUOTE_PAIRS) {
-        const info = {
-            close: pair.close,
-            symmetric: Boolean(pair.symmetric),
-            apostropheSensitive: Boolean(pair.apostropheSensitive),
-        };
-        QUOTE_OPENERS.set(pair.open, info);
-        if (info.symmetric) {
-            continue;
+    const offset = Number.isFinite(bufferOffset) ? Math.max(0, Math.floor(bufferOffset)) : 0;
+    const limit = offset + Math.max(0, textLength);
+    return state.ranges
+        .filter((range) => {
+            if (!Array.isArray(range) || range.length < 2) {
+                return false;
+            }
+            const [start, end] = range;
+            if (!Number.isFinite(start) || !Number.isFinite(end)) {
+                return false;
+            }
+            return end >= offset && start < limit;
+        })
+        .map(([start, end]) => [
+            Math.max(0, start - offset),
+            Math.max(0, Math.min(limit - offset - 1, end - offset)),
+        ])
+        .sort((a, b) => a[0] - b[0]);
+}
+
+function scanQuotes(text, quoteState, options = {}) {
+    const state = quoteState || createQuoteState(options.bufferOffset);
+    const offset = Number.isFinite(options.bufferOffset) ? Math.max(0, Math.floor(options.bufferOffset)) : 0;
+    const startIndex = Number.isFinite(options.startIndex) && options.startIndex >= 0
+        ? Math.min(Math.floor(options.startIndex), text.length)
+        : 0;
+    const reset = Boolean(options.reset);
+
+    if (reset) {
+        state.ranges = [];
+        state.stack = [];
+        state.lastIndex = offset - 1;
+    } else {
+        if (!Array.isArray(state.ranges)) {
+            state.ranges = [];
         }
-        if (!QUOTE_CLOSERS.has(pair.close)) {
-            QUOTE_CLOSERS.set(pair.close, []);
+        if (!Array.isArray(state.stack)) {
+            state.stack = [];
         }
-        QUOTE_CLOSERS.get(pair.close).push(pair.open);
     }
 
     const isLikelyApostrophe = (index) => {
@@ -186,7 +237,8 @@ export function getQuoteRanges(text) {
         return WORD_CHAR_REGEX.test(prev) && WORD_CHAR_REGEX.test(next);
     };
 
-    for (let i = 0; i < text.length; i += 1) {
+    let absoluteIndex = offset + startIndex;
+    for (let i = startIndex; i < text.length; i += 1, absoluteIndex += 1) {
         const ch = text[i];
         const openerInfo = QUOTE_OPENERS.get(ch);
         if (openerInfo) {
@@ -194,46 +246,58 @@ export function getQuoteRanges(text) {
                 if (openerInfo.apostropheSensitive && isLikelyApostrophe(i)) {
                     continue;
                 }
-                const top = stack[stack.length - 1];
+                const top = state.stack[state.stack.length - 1];
                 if (top && top.open === ch && top.symmetric) {
-                    stack.pop();
-                    ranges.push([top.index, i]);
+                    state.stack.pop();
+                    state.ranges.push([top.index, absoluteIndex]);
                 } else {
-                    stack.push({
+                    state.stack.push({
                         open: ch,
                         close: openerInfo.close,
-                        index: i,
+                        index: absoluteIndex,
                         symmetric: true,
                         apostropheSensitive: openerInfo.apostropheSensitive,
                     });
                 }
                 continue;
             }
-            stack.push({ open: ch, close: openerInfo.close, index: i, symmetric: false });
+            state.stack.push({ open: ch, close: openerInfo.close, index: absoluteIndex, symmetric: false });
             continue;
         }
 
         const closeCandidates = QUOTE_CLOSERS.get(ch);
-        if (closeCandidates && stack.length) {
-            for (let j = stack.length - 1; j >= 0; j -= 1) {
-                const candidate = stack[j];
+        if (closeCandidates && state.stack.length) {
+            for (let j = state.stack.length - 1; j >= 0; j -= 1) {
+                const candidate = state.stack[j];
                 if (!candidate.symmetric && candidate.close === ch && closeCandidates.includes(candidate.open)) {
-                    stack.splice(j, 1);
-                    ranges.push([candidate.index, i]);
+                    state.stack.splice(j, 1);
+                    state.ranges.push([candidate.index, absoluteIndex]);
                     break;
                 }
             }
             continue;
         }
 
-        const top = stack[stack.length - 1];
+        const top = state.stack[state.stack.length - 1];
         if (top && top.symmetric && ch === top.close) {
-            stack.pop();
-            ranges.push([top.index, i]);
+            state.stack.pop();
+            state.ranges.push([top.index, absoluteIndex]);
         }
     }
 
-    return ranges.sort((a, b) => a[0] - b[0]);
+    state.lastIndex = Math.max(state.lastIndex, text.length > 0 ? offset + text.length - 1 : offset - 1);
+    state.windowOffset = offset;
+    return state;
+}
+
+export function getQuoteRanges(text) {
+    if (!text) {
+        return [];
+    }
+    const input = typeof text === "string" ? text : String(text ?? "");
+    const state = createQuoteState(0);
+    scanQuotes(input, state, { startIndex: 0, bufferOffset: 0, reset: true });
+    return projectQuoteRanges(state, 0, input.length);
 }
 
 export function isIndexInsideQuotes(index, quoteRanges) {
@@ -366,7 +430,32 @@ export function collectDetections(text, profile = {}, regexes = {}, options = {}
     if (!text || !profile) {
         return [];
     }
-    const quoteRanges = options.quoteRanges || getQuoteRanges(text);
+    const sourceText = typeof text === "string" ? text : String(text ?? "");
+    const bufferOffset = Number.isFinite(options.bufferOffset) ? Math.max(0, Math.floor(options.bufferOffset)) : 0;
+    const quoteState = typeof options.quoteState === "object" && options.quoteState ? options.quoteState : null;
+    let quoteRanges;
+    if (Array.isArray(options.quoteRanges)) {
+        quoteRanges = options.quoteRanges;
+    } else if (quoteState) {
+        const resetQuotes = !Number.isFinite(options.lastIndex)
+            || options.lastIndex < bufferOffset - 1
+            || Boolean(options.resetQuoteState);
+        const resolvedStartIndex = Number.isFinite(options.startIndex) && options.startIndex >= 0
+            ? Math.max(0, Math.min(Math.floor(options.startIndex), sourceText.length))
+            : 0;
+        const relativeFromLast = Number.isFinite(options.lastIndex)
+            ? Math.max(0, Math.floor(options.lastIndex + 1 - bufferOffset))
+            : 0;
+        const quoteStart = resetQuotes ? 0 : Math.min(resolvedStartIndex, relativeFromLast);
+        scanQuotes(sourceText, quoteState, {
+            startIndex: quoteStart,
+            bufferOffset,
+            reset: resetQuotes,
+        });
+        quoteRanges = projectQuoteRanges(quoteState, bufferOffset, sourceText.length);
+    } else {
+        quoteRanges = getQuoteRanges(sourceText);
+    }
     const priorityWeights = options.priorityWeights || {};
     const scanDialogueActions = Boolean(options.scanDialogueActions);
     const startIndex = Number.isFinite(options.startIndex) && options.startIndex > 0
@@ -398,7 +487,7 @@ export function collectDetections(text, profile = {}, regexes = {}, options = {}
     };
 
     if (regexes.speakerRegex) {
-        findMatches(text, regexes.speakerRegex, quoteRanges, matchOptions).forEach(match => {
+        findMatches(sourceText, regexes.speakerRegex, quoteRanges, matchOptions).forEach(match => {
             const name = match.groups?.[0]?.trim();
             addMatch(name, "speaker", match.index, priorityWeights.speaker, getMatchLength(match));
         });
@@ -406,7 +495,7 @@ export function collectDetections(text, profile = {}, regexes = {}, options = {}
 
     if (profile.detectAttribution !== false && regexes.attributionRegex) {
         findMatches(
-            text,
+            sourceText,
             regexes.attributionRegex,
             quoteRanges,
             { searchInsideQuotes: scanDialogueActions, ...matchOptions },
@@ -418,7 +507,7 @@ export function collectDetections(text, profile = {}, regexes = {}, options = {}
 
     if (profile.detectAction !== false && regexes.actionRegex) {
         findMatches(
-            text,
+            sourceText,
             regexes.actionRegex,
             quoteRanges,
             { searchInsideQuotes: scanDialogueActions, ...matchOptions },
@@ -433,14 +522,14 @@ export function collectDetections(text, profile = {}, regexes = {}, options = {}
         : "";
 
     if (profile.detectPronoun && regexes.pronounRegex && validatedSubject) {
-        findMatches(text, regexes.pronounRegex, quoteRanges, matchOptions).forEach(match => {
+        findMatches(sourceText, regexes.pronounRegex, quoteRanges, matchOptions).forEach(match => {
             addMatch(validatedSubject, "pronoun", match.index, priorityWeights.pronoun, getMatchLength(match));
         });
     }
 
     if (profile.detectVocative !== false && regexes.vocativeRegex) {
         findMatches(
-            text,
+            sourceText,
             regexes.vocativeRegex,
             quoteRanges,
             { searchInsideQuotes: true, ...matchOptions },
@@ -451,14 +540,14 @@ export function collectDetections(text, profile = {}, regexes = {}, options = {}
     }
 
     if (profile.detectPossessive && regexes.possessiveRegex) {
-        findMatches(text, regexes.possessiveRegex, quoteRanges, matchOptions).forEach(match => {
+        findMatches(sourceText, regexes.possessiveRegex, quoteRanges, matchOptions).forEach(match => {
             const name = match.groups?.[0]?.trim();
             addMatch(name, "possessive", match.index, priorityWeights.possessive, getMatchLength(match));
         });
     }
 
     if (profile.detectGeneral && regexes.nameRegex) {
-        findMatches(text, regexes.nameRegex, quoteRanges, matchOptions).forEach(match => {
+        findMatches(sourceText, regexes.nameRegex, quoteRanges, matchOptions).forEach(match => {
             const raw = match.groups?.[0] ?? match.match;
             const name = String(raw ?? "").replace(/-(?:sama|san)$/i, "").trim();
             addMatch(name, "name", match.index, priorityWeights.name, getMatchLength(match));

@@ -6,7 +6,7 @@ await register(new URL("./module-mock-loader.js", import.meta.url));
 
 const extensionSettingsStore = globalThis.__extensionSettingsStore || (globalThis.__extensionSettingsStore = {});
 
-const { simulateTesterStream, state, extensionName } = await import("../index.js");
+const { simulateTesterStream, state, extensionName, updateMessageAnalytics } = await import("../index.js");
 const {
     getLiveTesterOutputsSnapshot,
     clearLiveTesterOutputs,
@@ -91,6 +91,26 @@ function createMessageState(profile) {
         processedLength: 0,
         lastAcceptedIndex: -1,
         bufferOffset: 0,
+        detectionContext: {
+            lastProcessedAbsolute: -1,
+            quoteState: {
+                ranges: [],
+                stack: [],
+                windowOffset: 0,
+                lastIndex: -1,
+            },
+            matchCache: {
+                matches: [],
+                processedAbsolute: -1,
+                windowOffset: 0,
+            },
+            metrics: {
+                incrementalRuns: 0,
+                incrementalChars: 0,
+                fullRuns: 0,
+                fullChars: 0,
+            },
+        },
     };
 }
 
@@ -224,4 +244,86 @@ test("simulateTesterStream syncs tester events into the shared decision log", ()
         "session log should match the in-memory tester log length");
     assert.ok(session.recentDecisionEvents.every(event => event.messageKey.startsWith("tester:")),
         "session tester log should carry the tester message key prefix");
+});
+
+test("incremental analytics handles long streaming messages without full rescans", () => {
+    const profile = setupProfile({ detectGeneral: true, maxBufferChars: 8192 });
+    const bufKey = "tester-incremental";
+    const msgState = createMessageState(profile);
+    state.perMessageStates = new Map([[bufKey, msgState]]);
+    state.perMessageBuffers = new Map([[bufKey, ""]]);
+    state.messageMatches = new Map();
+    state.messageStats = new Map();
+    state.topSceneRanking = new Map();
+    state.topSceneRankingUpdatedAt = new Map();
+
+    const segments = [];
+    for (let i = 0; i < 120; i += 1) {
+        if (i % 2 === 0) {
+            segments.push("Kotori relays orders to Shido while Kotori adjusts the controls. ");
+        } else {
+            segments.push("Shido answers Kotori with determination as Shido steadies the crew. ");
+        }
+    }
+    const longMessage = segments.join("");
+    const chunkSize = 64;
+    const chunks = [];
+    for (let i = 0; i < longMessage.length; i += chunkSize) {
+        chunks.push(longMessage.slice(i, i + chunkSize));
+    }
+
+    let buffer = "";
+    chunks.forEach((chunk) => {
+        const previousLength = buffer.length;
+        buffer += chunk;
+        state.perMessageBuffers.set(bufKey, buffer);
+        updateMessageAnalytics(bufKey, buffer, {
+            rosterSet: msgState.sceneRoster,
+            assumeNormalized: true,
+            bufferOffset: msgState.bufferOffset,
+            incremental: true,
+            startIndex: previousLength,
+            previousProcessedAbsolute: msgState.detectionContext.lastProcessedAbsolute,
+            messageState: msgState,
+        });
+        msgState.processedLength = buffer.length;
+    });
+
+    const metrics = msgState.detectionContext.metrics;
+    assert.ok(metrics.incrementalRuns >= chunks.length,
+        "expected the incremental scanner to run for each streamed chunk");
+    assert.equal(metrics.fullRuns, 0, "full rescans should be avoided during incremental streaming");
+    assert.equal(metrics.incrementalChars, longMessage.length,
+        "incremental scanner should process the entire message length");
+
+    const stats = state.messageStats.get(bufKey);
+    assert.ok(stats instanceof Map && stats.size > 0, "expected analytics stats for the streamed message");
+
+    const detectionOptions = {
+        priorityWeights: {
+            speaker: profile.prioritySpeakerWeight,
+            attribution: profile.priorityAttributionWeight,
+            action: profile.priorityActionWeight,
+            pronoun: profile.priorityPronounWeight,
+            vocative: profile.priorityVocativeWeight,
+            possessive: profile.priorityPossessiveWeight,
+            name: profile.priorityNameWeight,
+        },
+        scanDialogueActions: Boolean(profile.scanDialogueActions),
+    };
+    const offlineMatches = collectDetections(longMessage, profile, state.compiledRegexes, detectionOptions);
+    const expectedStats = new Map();
+    offlineMatches.forEach((match) => {
+        const normalized = String(match?.name ?? "").trim();
+        if (!normalized) {
+            return;
+        }
+        expectedStats.set(normalized, (expectedStats.get(normalized) || 0) + 1);
+    });
+    assert.deepEqual(Array.from(stats.entries()), Array.from(expectedStats.entries()),
+        "incremental stats should match a full detection pass");
+
+    const ranking = state.topSceneRanking.get(bufKey) || [];
+    assert.ok(ranking.length > 0, "expected a populated ranking for the streamed message");
+    assert.equal(ranking[0].name, "Kotori", "highest frequency character should top the ranking");
 });
