@@ -9,6 +9,7 @@
 - **Roster expiry counter.** Every roster entry now displays the remaining message count before it expires, making it easy to spot characters that are about to drop from the scene.
 - **Aurora side panel finish.** The roster workspace picked up animated lighting, hover glows, and a responsive section scaffold so the settings footer stays anchored and never falls off-screen.
 - **Coverage suggestions in the scene panel.** Vocabulary guidance from the live tester now appears alongside the roster with quick-add pills that update in real time as chats roll in.
+- **Regex preprocessor opt-ins.** Profiles can opt into allowed global, preset, and scoped regex scripts, and the Live Tester now reveals the preprocessed text they run against.
 
 ### Improved
 - **Scene control center aurora parity.** The roster headline now inherits the hero gradient and animated starfield from the main header so the command center shares the same nebula finish.
@@ -20,6 +21,7 @@
 - **Scene panel layout cleanup.** Retired the legacy collapse handle so the crest header and toolbar own panel visibility, keeping the frame tidy without the extra toggle stub.
 
 ### Fixed
+- **Regex script imports.** Corrected the regex engine import path so script collections load in SillyTavern without triggering MIME type errors.
 - **Toggle styling isolation.** Master and inline switches now render with self-contained tracks so other extensions can no longer distort their shape.
 - **Scene panel user message handling.** User-authored chat updates no longer trigger roster wipes or scene panel refreshes, so the control center stays stable and message counters persist while players talk.
 - **Scene panel idle refresh.** Chat-change hooks now ignore updates that don't alter the latest assistant message, so editing system prompts or sending player chatter no longer clears or replays roster detections.
