@@ -386,4 +386,3 @@ export function regexFromString(value) {
         return null;
     }
 }
-
