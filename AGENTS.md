@@ -11,5 +11,5 @@
 - Document noteworthy changes in CHANGELOG.md to contribute to the future releases changelog. If CHANGELOG.md is still set for the previous or currently released version, then reset it and prep it for future release.
 - Use `rpg-companion-sillytavern/` for help if needed. Remember, `rpg-companion-sillytavern/` is for reference ONLY, and not to be touched.
 
-# Expressions
-- `expressions/` is the character expressions extension. This is the extension Costume Switcher was made to interact with with the /costume command. You will use this for reference only.
+# Help
+- `for-help-only/` is a folder containing 3 different extensions, along with a bunch of scripts for you to look at. They are for help and reference only, meaning you aren't allowed to edit them.
