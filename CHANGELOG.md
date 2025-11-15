@@ -22,6 +22,7 @@
 - **Scene panel layout cleanup.** Retired the legacy collapse handle so the crest header and toolbar own panel visibility, keeping the frame tidy without the extra toggle stub.
 
 ### Fixed
+- **Host API shims.** Replaced direct SillyTavern core imports with a runtime bridge so third-party builds load without MIME type or cross-origin module errors.
 - **Regex script imports.** Corrected the regex engine import path so script collections load in SillyTavern without triggering MIME type errors.
 - **Fuzzy matcher import path.** Bundled the Fuse.js ESM build with the extension so browsers stop throwing bare-specifier errors when the name preprocessor loads.
 - **Toggle styling isolation.** Master and inline switches now render with self-contained tracks so other extensions can no longer distort their shape.
