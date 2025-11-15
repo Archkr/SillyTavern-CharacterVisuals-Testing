@@ -1,6 +1,15 @@
-import { extension_settings, getContext, renderExtensionTemplateAsync } from "../../../extensions.js";
-import { saveSettingsDebounced, saveChatDebounced, event_types, eventSource, system_message_types } from "../../../../script.js";
-import { executeSlashCommandsOnChatInput, registerSlashCommand } from "../../../slash-commands.js";
+import {
+    extension_settings,
+    getContext,
+    renderExtensionTemplateAsync,
+    saveSettingsDebounced,
+    saveChatDebounced,
+    event_types,
+    eventSource,
+    system_message_types,
+    executeSlashCommandsOnChatInput,
+    registerSlashCommand,
+} from "./src/platform/sillytavern-api.js";
 import {
     DEFAULT_ACTION_VERBS_PRESENT,
     DEFAULT_ACTION_VERBS_THIRD_PERSON,
