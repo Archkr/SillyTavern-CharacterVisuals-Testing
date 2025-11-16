@@ -1087,17 +1087,18 @@ function rankSceneCharacters(matches, options = {}) {
 
     matches.forEach((match, idx) => {
         if (!match || !match.name) return;
-        const canonical = match.name;
+        const canonical = typeof match.name === "string" ? match.name.trim() : "";
         const normalized = normalizeCostumeName(canonical);
         if (!normalized) return;
 
-        const displayName = String(match.rawName || canonical).trim() || normalized;
+        const rawName = typeof match.rawName === "string" ? match.rawName.trim() : "";
+        const displayName = canonical || normalized;
         const key = normalized.toLowerCase();
         let entry = summary.get(key);
         if (!entry) {
             entry = {
                 name: displayName,
-                rawName: match.rawName || displayName,
+                rawName: rawName || displayName,
                 normalized,
                 count: 0,
                 bestPriority: -Infinity,
@@ -11297,6 +11298,7 @@ export {
     getVerbInflections,
     getWinner,
     findBestMatch,
+    rankSceneCharacters,
     updateMessageAnalytics,
     adjustWindowForTrim,
     simulateTesterStream,
