@@ -60,6 +60,20 @@ const DEFAULT_TOLERANCE = Object.freeze({
     maxScore: 0.45,
 });
 
+function clampScore(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) {
+        return null;
+    }
+    if (number <= 0) {
+        return 0;
+    }
+    if (number >= 1) {
+        return 1;
+    }
+    return number;
+}
+
 function normalizeBoolean(value, fallback = false) {
     if (value === null || value === undefined) {
         return fallback;
@@ -290,9 +304,10 @@ export function createNamePreprocessor({
                         return overlapRatio >= MIN_FUZZY_CHARACTER_OVERLAP_RATIO;
                     });
                     if (selected?.item) {
+                        const normalizedScore = clampScore(selected.score);
                         canonical = selected.item;
                         method = "fuzzy";
-                        score = typeof selected.score === "number" ? selected.score : null;
+                        score = normalizedScore;
                     }
                 }
             }
