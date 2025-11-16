@@ -107,6 +107,42 @@ test("collectDetections rescues near-miss tokens when fuzzy tolerance active", (
     assert.equal(matches.fuzzyResolution.used, true);
 });
 
+test("collectDetections rescues short names that only differ by one character", () => {
+    const profile = {
+        patternSlots: [
+            { name: "Miku" },
+        ],
+        ignorePatterns: [],
+        attributionVerbs: [],
+        actionVerbs: ["reached"],
+        pronounVocabulary: ["she"],
+        detectAttribution: false,
+        detectAction: true,
+        detectVocative: false,
+        detectPossessive: false,
+        detectPronoun: false,
+        detectGeneral: true,
+        fuzzyTolerance: "auto",
+    };
+
+    const { regexes } = compileProfileRegexes(profile, {
+        unicodeWordPattern: "[\\p{L}\\p{M}]",
+        defaultPronouns: ["she"],
+    });
+
+    const sample = "Miki reached for her staff.";
+    const matches = collectDetections(sample, profile, regexes, {
+        priorityWeights: { action: 1 },
+        unicodeWordPattern: "[\\p{L}\\p{M}]",
+    });
+
+    const rescued = matches.find(entry => entry.rawName === "Miki");
+    assert.ok(rescued, "expected near-miss fallback for short name");
+    assert.equal(rescued.name, "Miku");
+    assert.equal(rescued.nameResolution?.method, "fuzzy");
+    assert.equal(rescued.nameResolution?.canonical, "Miku");
+});
+
 test("collectDetections rescues action cues when general detection disabled", () => {
     const profile = {
         patternSlots: [

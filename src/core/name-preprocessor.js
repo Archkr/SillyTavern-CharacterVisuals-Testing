@@ -268,6 +268,7 @@ export function createNamePreprocessor({
         })) {
             applied = true;
             if (fuse) {
+                const allowLooseFuzzyMatch = Boolean(meta?.allowLooseFuzzyMatch);
                 const query = translate ? normalized : stripDiacritics(sampledTrimmed);
                 const results = fuse.search(query);
                 if (Array.isArray(results) && results.length) {
