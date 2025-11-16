@@ -6124,6 +6124,7 @@ export {
     getVerbInflections,
     getWinner,
     findBestMatch,
+    rankSceneCharacters,
     adjustWindowForTrim,
     simulateTesterStream,
     buildVariantFolderPath,
