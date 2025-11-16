@@ -200,6 +200,8 @@ Choose a preset from **Name Matching → Fuzzy Tolerance** based on how messy yo
 
 To see the difference, paste `"Ailce reached for her staff."` into the Live Pattern Tester. With fuzzy matching off the action detector ignores the typo. Enable **Auto** and the detector rewrites the hit to **Alice** because the edit distance is only one letter, and the score now clears the decision gate. Pair the tolerance with the **Translate Accents** toggle whenever a scene swaps alphabets or diacritics frequently—the shared buffer ensures the extension rescues live detections immediately, while the tester mirrors every fuzzy rescue so you can preview the outcome.
 
+Need to scan lowercase cues or system prompts (for example, when a preset intentionally lowercases speaker labels)? Flip on **Scan Lowercase Cues** under Name Matching. It re-enables the lowercase sweep for fuzzy fallback rescues so those intentionally lowercased cues can still remap to your cast. Leave it off for normal chats so filler words like “and/but” stay ignored.
+
 ### Performance & Bias
 Fine-tune responsiveness and tie-breaking behaviour:
 - **Global Cooldown (ms)** – Minimum time between any two costume changes.

@@ -218,6 +218,7 @@ const AUTO_SAVE_RECOMPILE_KEYS = new Set([
     'actionVerbs',
     'pronounVocabulary',
     'scriptCollections',
+    'scanLowercaseFallbackTokens',
 ]);
 const AUTO_SAVE_FOCUS_LOCK_KEYS = new Set(['patterns']);
 const AUTO_SAVE_REASON_OVERRIDES = {
@@ -239,6 +240,7 @@ const AUTO_SAVE_REASON_OVERRIDES = {
     detectPossessive: 'possessive detection',
     detectPronoun: 'pronoun detection',
     detectGeneral: 'general name detection',
+    scanLowercaseFallbackTokens: 'lowercase fallback scanning',
     fuzzyTolerance: 'name matching tolerance',
     translateFuzzyNames: 'accent translation',
     scriptCollections: 'regex preprocessor',
@@ -4084,6 +4086,7 @@ const uiMapping = {
     detectPossessive: { selector: '#cs-detect-possessive', type: 'checkbox' },
     detectPronoun: { selector: '#cs-detect-pronoun', type: 'checkbox' },
     detectGeneral: { selector: '#cs-detect-general', type: 'checkbox' },
+    scanLowercaseFallbackTokens: { selector: '#cs-scan-lowercase-fallback', type: 'checkbox' },
     fuzzyTolerance: { selector: '#cs-fuzzy-tolerance', type: 'fuzzyTolerance' },
     translateFuzzyNames: { selector: '#cs-translate-fuzzy-names', type: 'checkbox' },
     attributionVerbs: { selector: '#cs-attribution-verbs', type: 'csvTextarea' },
