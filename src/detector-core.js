@@ -700,11 +700,75 @@ export function compileProfileRegexes(profile = {}, options = {}) {
     };
 }
 
+function sanitizeAppliedScripts(applied = []) {
+    if (!Array.isArray(applied) || !applied.length) {
+        return [];
+    }
+    const sanitized = [];
+    applied.forEach((entry, index) => {
+        if (!entry || typeof entry !== "object") {
+            return;
+        }
+        const script = entry.script && typeof entry.script === "object" ? entry.script : null;
+        const resolvedName = script && typeof script.name === "string" && script.name.trim()
+            ? script.name.trim()
+            : script && typeof script.label === "string" && script.label.trim()
+                ? script.label.trim()
+                : script && typeof script.title === "string" && script.title.trim()
+                    ? script.title.trim()
+                    : script && typeof script.id === "string"
+                        ? script.id.trim()
+                        : `Script ${index + 1}`;
+        const resolvedDescription = script && typeof script.description === "string"
+            ? script.description.trim()
+            : script && typeof script.desc === "string"
+                ? script.desc.trim()
+                : "";
+        sanitized.push({
+            collection: typeof entry.collection === "string" ? entry.collection : null,
+            script: script
+                ? {
+                    id: script.id ?? script.scriptId ?? null,
+                    name: resolvedName,
+                    description: resolvedDescription,
+                }
+                : null,
+        });
+    });
+    return sanitized;
+}
+
+function describeFuzzyModeLabel(setting, tolerance) {
+    if (typeof setting === "string" && setting.trim()) {
+        return setting.trim();
+    }
+    if (typeof setting === "number" && Number.isFinite(setting)) {
+        return `≤${Math.floor(setting)}`;
+    }
+    if (setting && typeof setting === "object") {
+        if (typeof setting.mode === "string" && setting.mode.trim()) {
+            return setting.mode.trim();
+        }
+        if (typeof setting.label === "string" && setting.label.trim()) {
+            return setting.label.trim();
+        }
+        return "custom";
+    }
+    if (typeof setting === "boolean") {
+        return setting ? "custom" : "off";
+    }
+    if (tolerance && tolerance.enabled) {
+        return tolerance.accentSensitive ? "auto" : "always";
+    }
+    return "off";
+}
+
 export function collectDetections(text, profile = {}, regexes = {}, options = {}) {
     const matches = [];
     const originalText = typeof text === "string" ? text : String(text ?? "");
     matches.originalText = originalText;
     matches.preprocessedText = originalText;
+    matches.preprocessorScripts = [];
     const toleranceSetting = options?.fuzzyTolerance ?? profile?.fuzzyTolerance ?? null;
     const tolerance = resolveFuzzyTolerance(toleranceSetting);
     const translateNames = Boolean(options?.translateFuzzyNames ?? profile?.translateFuzzyNames ?? profile?.translateNames ?? false);
@@ -716,12 +780,14 @@ export function collectDetections(text, profile = {}, regexes = {}, options = {}
         translate: translateNames,
         aliasMap,
     });
+    const fuzzyMode = describeFuzzyModeLabel(toleranceSetting, tolerance);
     matches.fuzzyResolution = {
         tolerance,
         translateNames,
         candidateCount: candidateList.length,
         used: false,
         aliasCount: aliasMap.size,
+        mode: fuzzyMode,
     };
     if (!originalText || !profile) {
         return matches;
@@ -730,6 +796,7 @@ export function collectDetections(text, profile = {}, regexes = {}, options = {}
     const preprocessorResult = applyPreprocessorScripts(originalText, pipeline);
     const sourceText = typeof preprocessorResult?.text === "string" ? preprocessorResult.text : originalText;
     matches.preprocessedText = sourceText;
+    matches.preprocessorScripts = sanitizeAppliedScripts(preprocessorResult?.applied);
     const bufferOffset = Number.isFinite(options.bufferOffset) ? Math.max(0, Math.floor(options.bufferOffset)) : 0;
     const quoteState = typeof options.quoteState === "object" && options.quoteState ? options.quoteState : null;
     let quoteRanges;

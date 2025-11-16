@@ -426,6 +426,11 @@ const DEFAULT_SCENE_PANEL_SETTINGS = Object.freeze({
 });
 
 const SCRIPT_COLLECTION_KEYS = Object.freeze(["global", "preset", "scoped"]);
+const SCRIPT_COLLECTION_LABELS = Object.freeze({
+    global: "Global",
+    preset: "Preset",
+    scoped: "Scoped",
+});
 
 const SCENE_PANEL_SECTION_LABELS = Object.freeze({
     roster: "Scene roster",
@@ -519,6 +524,8 @@ const state = {
     testerTimers: [],
     lastTesterReport: null,
     lastPreprocessedText: "",
+    lastPreprocessorScripts: [],
+    lastFuzzyResolution: null,
     recentDecisionEvents: [],
     lastVetoMatch: null,
     buildMeta: null,
@@ -928,6 +935,8 @@ function findAllMatches(combined, options = {}) {
         ? matches.preprocessedText
         : combined;
     state.lastPreprocessedText = processed;
+    state.lastPreprocessorScripts = clonePreprocessorScripts(matches?.preprocessorScripts || []);
+    state.lastFuzzyResolution = cloneFuzzyResolution(matches?.fuzzyResolution);
     return matches;
 }
 
@@ -6337,7 +6346,11 @@ function refreshTesterPreprocessorPreview(pipeline = null) {
         : normalizedInput;
     state.lastPreprocessedText = processedText;
     lastReport.preprocessedText = processedText;
+    const scriptSummary = normalizeAppliedScriptEntries(result?.applied);
+    state.lastPreprocessorScripts = scriptSummary;
+    lastReport.preprocessorScripts = clonePreprocessorScripts(scriptSummary);
     updateTesterPreprocessedDisplay(processedText);
+    renderTesterPreprocessorMeta({ scripts: scriptSummary });
 }
 
 function renderTesterScoreBreakdown(details) {
@@ -6565,6 +6578,186 @@ function refreshCoverageFromLastReport() {
     }
 }
 
+function describeScriptCollectionLabel(key) {
+    if (!key) {
+        return "Custom";
+    }
+    const normalized = String(key).toLowerCase();
+    return SCRIPT_COLLECTION_LABELS[normalized] || key;
+}
+
+function resolveScriptName(script, index = 0) {
+    if (!script || typeof script !== "object") {
+        return `Script ${index + 1}`;
+    }
+    const candidates = [script.name, script.label, script.title, script.id, script.scriptId];
+    for (const candidate of candidates) {
+        if (typeof candidate === "string" && candidate.trim()) {
+            return candidate.trim();
+        }
+    }
+    return `Script ${index + 1}`;
+}
+
+function resolveScriptDescription(script) {
+    if (!script || typeof script !== "object") {
+        return "";
+    }
+    const description = typeof script.description === "string"
+        ? script.description
+        : typeof script.desc === "string"
+            ? script.desc
+            : "";
+    return description.trim();
+}
+
+function normalizeAppliedScriptEntries(applied = []) {
+    if (!Array.isArray(applied)) {
+        return [];
+    }
+    return applied
+        .map((entry, index) => {
+            if (!entry || typeof entry !== "object") {
+                return null;
+            }
+            const script = entry.script && typeof entry.script === "object" ? entry.script : null;
+            return {
+                collection: typeof entry.collection === "string" ? entry.collection : null,
+                script: script
+                    ? {
+                        id: script.id ?? script.scriptId ?? null,
+                        name: resolveScriptName(script, index),
+                        description: resolveScriptDescription(script),
+                    }
+                    : null,
+            };
+        })
+        .filter(Boolean);
+}
+
+function clonePreprocessorScripts(scripts = []) {
+    if (!Array.isArray(scripts)) {
+        return [];
+    }
+    return scripts.map(entry => ({
+        collection: entry?.collection ?? null,
+        script: entry?.script
+            ? {
+                id: entry.script.id ?? null,
+                name: entry.script.name ?? null,
+                description: entry.script.description ?? "",
+            }
+            : null,
+    }));
+}
+
+function cloneFuzzyResolution(value) {
+    if (!value || typeof value !== "object") {
+        return null;
+    }
+    const tolerance = value.tolerance && typeof value.tolerance === "object"
+        ? { ...value.tolerance }
+        : null;
+    const fallbackMode = tolerance?.enabled
+        ? tolerance.accentSensitive
+            ? "auto"
+            : "always"
+        : "off";
+    return {
+        tolerance,
+        translateNames: Boolean(value.translateNames),
+        candidateCount: Number.isFinite(value.candidateCount) ? value.candidateCount : 0,
+        used: Boolean(value.used),
+        aliasCount: Number.isFinite(value.aliasCount) ? value.aliasCount : 0,
+        mode: typeof value.mode === "string" ? value.mode : fallbackMode,
+    };
+}
+
+function renderTesterScriptList(scriptsInput) {
+    const list = $("#cs-preprocessor-script-list");
+    if (!list.length) {
+        return;
+    }
+    const scripts = Array.isArray(scriptsInput) ? scriptsInput : [];
+    list.empty();
+    if (!scripts.length) {
+        list.append($('<li>').addClass('cs-tester-list-placeholder').text('No scripts executed.'));
+        return;
+    }
+    scripts.forEach((entry, index) => {
+        const item = $('<li>').addClass('cs-script-entry');
+        const summary = $('<div>').addClass('cs-script-entry__summary');
+        summary.append($('<span>').addClass('cs-script-entry__collection').text(describeScriptCollectionLabel(entry?.collection)));
+        const scriptName = entry?.script?.name || `Script ${index + 1}`;
+        summary.append($('<span>').addClass('cs-script-entry__name').text(scriptName));
+        const actions = $('<div>').addClass('cs-script-entry__actions');
+        const expandButton = $('<button type="button">')
+            .addClass('cs-script-entry__action cs-script-entry__expand')
+            .attr('aria-expanded', 'false')
+            .text('Show Details');
+        actions.append(expandButton);
+        const hasDescription = Boolean(entry?.script?.description);
+        const copyButton = $('<button type="button">')
+            .addClass('cs-script-entry__action cs-script-entry__copy')
+            .text('Copy')
+            .prop('disabled', !hasDescription);
+        if (hasDescription) {
+            copyButton.attr('title', 'Copy script description.');
+            copyButton.data('description', entry.script.description);
+        } else {
+            copyButton.attr('title', 'No description to copy.');
+        }
+        actions.append(copyButton);
+        summary.append(actions);
+        item.append(summary);
+        const description = $('<div>').addClass('cs-script-entry__description');
+        if (hasDescription) {
+            description.text(entry.script.description);
+        } else {
+            description.append($('<span>').addClass('cs-tester-list-placeholder').text('No description provided.'));
+        }
+        item.append(description);
+        list.append(item);
+    });
+}
+
+function renderTesterFuzzySummary(resolution) {
+    const pill = $("#cs-fuzzy-summary");
+    if (!pill.length) {
+        return;
+    }
+    const effective = resolution && typeof resolution === "object" ? resolution : null;
+    if (!effective || !effective.tolerance) {
+        pill.text('Fuzzy: Off');
+        pill.removeClass('is-active');
+        pill.attr('title', 'Fuzzy normalization disabled.');
+        return;
+    }
+    const modeLabel = effective.mode || (effective.tolerance.enabled ? (effective.tolerance.accentSensitive ? 'auto' : 'always') : 'off');
+    const aliasCount = Number.isFinite(effective.aliasCount) ? effective.aliasCount : 0;
+    const candidateCount = Number.isFinite(effective.candidateCount) ? effective.candidateCount : 0;
+    const summaryParts = [
+        `Mode: ${modeLabel}`,
+        `Translate names: ${effective.translateNames ? 'yes' : 'no'}`,
+        `Aliases loaded: ${aliasCount}`,
+        `Candidates tracked: ${candidateCount}`,
+        `Fuzzy used: ${effective.used ? 'yes' : 'no'}`,
+        `Accent sensitive: ${effective.tolerance.accentSensitive ? 'yes' : 'no'}`,
+        `Low-confidence threshold: ${effective.tolerance.lowConfidenceThreshold ?? 'n/a'}`,
+        `Max fuzzy score: ${effective.tolerance.maxScore ?? 'n/a'}`,
+    ];
+    pill.text(`Fuzzy ${modeLabel} • ${effective.used ? 'matched' : 'idle'} • Aliases ${aliasCount}`);
+    pill.attr('title', summaryParts.join('\n'));
+    pill.toggleClass('is-active', Boolean(effective.used));
+}
+
+function renderTesterPreprocessorMeta({ scripts, fuzzy } = {}) {
+    const scriptsToRender = scripts !== undefined ? scripts : state.lastPreprocessorScripts;
+    renderTesterScriptList(scriptsToRender);
+    const fuzzySummary = fuzzy !== undefined ? fuzzy : state.lastFuzzyResolution;
+    renderTesterFuzzySummary(fuzzySummary);
+}
+
 function mergeUniqueList(target = [], additions = []) {
     const list = Array.isArray(target) ? [...target] : [];
     const seen = new Set(list.map(item => String(item).toLowerCase()));
@@ -6655,6 +6848,49 @@ function formatTesterReport(report) {
         ? report.profileSnapshot.patterns.map((entry) => String(entry ?? '').trim()).filter(Boolean)
         : [];
     lines.push(`Character Patterns: ${patternList.length ? patternList.join(', ') : '(none)'}`);
+    lines.push('');
+
+    const scriptSummary = Array.isArray(report.preprocessorScripts) ? report.preprocessorScripts : [];
+    lines.push('Preprocessor Scripts:');
+    if (scriptSummary.length) {
+        scriptSummary.forEach((entry, idx) => {
+            const label = describeScriptCollectionLabel(entry?.collection);
+            const scriptName = entry?.script?.name || '(unnamed script)';
+            lines.push(`  ${idx + 1}. [${label}] ${scriptName}`);
+            if (entry?.script?.description) {
+                entry.script.description.split(/\r?\n/).forEach(line => {
+                    lines.push(`       ${line}`);
+                });
+            }
+        });
+    } else {
+        lines.push('  (none executed)');
+    }
+    lines.push('');
+
+    const fuzzySummary = report.fuzzyResolution;
+    const toleranceInfo = fuzzySummary?.tolerance || null;
+    lines.push('Name Normalization:');
+    if (fuzzySummary) {
+        const fallbackMode = toleranceInfo?.enabled
+            ? toleranceInfo.accentSensitive
+                ? 'auto'
+                : 'always'
+            : 'off';
+        lines.push(`  Mode: ${fuzzySummary.mode || fallbackMode}`);
+        lines.push(`  Translate names: ${fuzzySummary.translateNames ? 'yes' : 'no'}`);
+        lines.push(`  Fuzzy used: ${fuzzySummary.used ? 'yes' : 'no'}`);
+        lines.push(`  Aliases loaded: ${fuzzySummary.aliasCount ?? 0}`);
+        lines.push(`  Candidates tracked: ${fuzzySummary.candidateCount ?? 0}`);
+        lines.push(`  Accent sensitive: ${toleranceInfo?.accentSensitive ? 'yes' : 'no'}`);
+        lines.push(`  Low-confidence threshold: ${toleranceInfo?.lowConfidenceThreshold ?? 'n/a'}`);
+        lines.push(`  Max fuzzy score: ${toleranceInfo?.maxScore ?? 'n/a'}`);
+    } else {
+        lines.push('  Mode: off');
+        lines.push('  Fuzzy used: no');
+        lines.push('  Aliases loaded: 0');
+        lines.push('  Candidates tracked: 0');
+    }
     lines.push('');
 
     const mergedDetections = mergeDetectionsForReport(report);
@@ -7385,6 +7621,9 @@ function testRegexPattern() {
     updateTesterCopyButton();
     updateTesterTopCharactersDisplay(null);
     updateTesterPreprocessedDisplay(null);
+    state.lastPreprocessorScripts = [];
+    state.lastFuzzyResolution = null;
+    renderTesterPreprocessorMeta({ scripts: [], fuzzy: null });
     $("#cs-test-veto-result").text('N/A').css('color', 'var(--text-color-soft)');
     renderTesterScoreBreakdown(null);
     renderTesterRosterTimeline(null, null);
@@ -7454,19 +7693,49 @@ function testRegexPattern() {
         replaceLiveTesterOutputs(vetoEvents, { roster: [], preprocessedText: state.lastPreprocessedText });
         requestScenePanelRender("tester-veto", { source: "tester" });
         const skipSummary = summarizeSkipReasonsForReport(vetoEvents);
-        state.lastTesterReport = { ...reportBase, vetoed: true, vetoMatch, events: vetoEvents, matches: [], topCharacters: [], rosterTimeline: [], rosterWarnings: [], scoreDetails: [], coverage, skipSummary, preprocessedText: state.lastPreprocessedText };
+        state.lastTesterReport = {
+            ...reportBase,
+            vetoed: true,
+            vetoMatch,
+            events: vetoEvents,
+            matches: [],
+            topCharacters: [],
+            rosterTimeline: [],
+            rosterWarnings: [],
+            scoreDetails: [],
+            coverage,
+            skipSummary,
+            preprocessedText: state.lastPreprocessedText,
+            preprocessorScripts: clonePreprocessorScripts(state.lastPreprocessorScripts),
+            fuzzyResolution: cloneFuzzyResolution(state.lastFuzzyResolution),
+        };
         updateTesterTopCharactersDisplay([]);
         updateTesterCopyButton();
     } else {
         $("#cs-test-veto-result").text('No veto phrases matched.').css('color', 'var(--green)');
 
         const allMatches = findAllMatches(combined).sort((a, b) => a.matchIndex - b.matchIndex);
+        renderTesterPreprocessorMeta();
         updateTesterPreprocessedDisplay(state.lastPreprocessedText);
         allDetectionsList.empty();
         if (allMatches.length > 0) {
             allMatches.forEach(m => {
                 const charPos = Number.isFinite(m.matchIndex) ? m.matchIndex + 1 : '?';
-                allDetectionsList.append(`<li><b>${m.name}</b> <small>(${m.matchKind} @ ${charPos}, p:${m.priority})</small></li>`);
+                const priorityLabel = Number.isFinite(m.priority) ? m.priority : 'n/a';
+                let resolutionNote = '';
+                if (m.nameResolution?.changed) {
+                    const rawSource = m.nameResolution.raw || m.rawName || m.originalName || m.name;
+                    const methodLabel = m.nameResolution.method === 'fuzzy'
+                        ? m.nameResolution.score != null
+                            ? `fuzzy:${m.nameResolution.score.toFixed(2)}`
+                            : 'fuzzy'
+                        : m.nameResolution.method || 'normalized';
+                    const safeRaw = typeof rawSource === 'string' && rawSource.trim()
+                        ? rawSource.trim()
+                        : 'unknown';
+                    resolutionNote = ` <span class="cs-detection-note">→ normalized from ‘${escapeHtml(safeRaw)}’ via ${escapeHtml(methodLabel)}</span>`;
+                }
+                allDetectionsList.append(`<li><b>${escapeHtml(m.name)}</b> <small>(${escapeHtml(m.matchKind)} @ ${charPos}, p:${priorityLabel})</small>${resolutionNote}</li>`);
             });
         } else {
             allDetectionsList.html('<li class="cs-tester-list-placeholder">No detections found.</li>');
@@ -7528,6 +7797,8 @@ function testRegexPattern() {
             scoreDetails: detailedScores.map(detail => ({ ...detail })),
             coverage,
             preprocessedText: state.lastPreprocessedText,
+            preprocessorScripts: clonePreprocessorScripts(state.lastPreprocessorScripts),
+            fuzzyResolution: cloneFuzzyResolution(state.lastFuzzyResolution),
         };
         updateTesterCopyButton();
     }
@@ -7570,6 +7841,28 @@ function wireUI() {
             return;
         }
         announceAutoSaveIntent(this, null, this.dataset.changeNotice, this.dataset.changeNoticeKey);
+    });
+    $(document).on('click', '.cs-script-entry__expand', function() {
+        const item = $(this).closest('.cs-script-entry');
+        if (!item.length) {
+            return;
+        }
+        const expanded = !item.hasClass('is-expanded');
+        item.toggleClass('is-expanded', expanded);
+        $(this).attr('aria-expanded', expanded ? 'true' : 'false');
+        $(this).text(expanded ? 'Hide Details' : 'Show Details');
+    });
+    $(document).on('click', '.cs-script-entry__copy', function() {
+        if (this?.disabled) {
+            return;
+        }
+        const description = $(this).data('description');
+        if (!description) {
+            return;
+        }
+        copyTextToClipboard(description)
+            .then(() => showStatus('Script description copied.', 'success'))
+            .catch(() => showStatus('Unable to copy script description.', 'error'));
     });
 
     $(document).on('input', '#cs-pattern-search', function() {
