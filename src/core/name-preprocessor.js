@@ -1,6 +1,10 @@
 import Fuse from "../vendor/fuse.mjs";
 import { sampleClassifyText } from "./sample-text.js";
 
+const MIN_FUZZY_CHARACTER_OVERLAP_RATIO = 0.5;
+const MAX_NORMALIZED_FUZZY_EDIT_DISTANCE = 0.34;
+const MAX_FUZZY_AFFIX_OVERHANG = 4;
+
 function toTrimmedString(value) {
     if (value == null) {
         return "";
@@ -13,6 +17,95 @@ export function stripDiacritics(value) {
         return "";
     }
     return value.normalize("NFD").replace(/\p{M}+/gu, "");
+}
+
+function normalizeOverlapKey(value) {
+    if (typeof value !== "string" || !value.trim()) {
+        return "";
+    }
+    return stripDiacritics(value)
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+function computeCharacterOverlapRatio(source, target) {
+    if (!source || !target) {
+        return 0;
+    }
+    const sourceCounts = new Map();
+    for (const char of source) {
+        sourceCounts.set(char, (sourceCounts.get(char) || 0) + 1);
+    }
+    let shared = 0;
+    for (const char of target) {
+        const available = sourceCounts.get(char);
+        if (available > 0) {
+            shared += 1;
+            sourceCounts.set(char, available - 1);
+        }
+    }
+    const maxLength = Math.max(source.length, target.length);
+    return maxLength > 0 ? shared / maxLength : 0;
+}
+
+function damerauLevenshteinDistance(source, target) {
+    if (!source || !target) {
+        return Math.max(source?.length ?? 0, target?.length ?? 0);
+    }
+    if (source === target) {
+        return 0;
+    }
+    const sourceLength = source.length;
+    const targetLength = target.length;
+    if (!sourceLength) {
+        return targetLength;
+    }
+    if (!targetLength) {
+        return sourceLength;
+    }
+    const matrix = Array.from({ length: sourceLength + 1 }, () => new Array(targetLength + 1).fill(0));
+    for (let i = 0; i <= sourceLength; i += 1) {
+        matrix[i][0] = i;
+    }
+    for (let j = 0; j <= targetLength; j += 1) {
+        matrix[0][j] = j;
+    }
+    for (let i = 1; i <= sourceLength; i += 1) {
+        const sourceChar = source[i - 1];
+        for (let j = 1; j <= targetLength; j += 1) {
+            const targetChar = target[j - 1];
+            const cost = sourceChar === targetChar ? 0 : 1;
+            let value = Math.min(
+                matrix[i - 1][j] + 1,
+                matrix[i][j - 1] + 1,
+                matrix[i - 1][j - 1] + cost,
+            );
+            if (
+                i > 1
+                && j > 1
+                && sourceChar === target[j - 2]
+                && source[i - 2] === targetChar
+            ) {
+                value = Math.min(value, matrix[i - 2][j - 2] + cost);
+            }
+            matrix[i][j] = value;
+        }
+    }
+    return matrix[sourceLength][targetLength];
+}
+
+function computeNormalizedEditDistance(source, target) {
+    const sourceLength = source?.length ?? 0;
+    const targetLength = target?.length ?? 0;
+    const maxLength = Math.max(sourceLength, targetLength);
+    if (!maxLength) {
+        return 0;
+    }
+    if (!sourceLength || !targetLength) {
+        return 1;
+    }
+    const distance = damerauLevenshteinDistance(source, target);
+    return distance / maxLength;
 }
 
 export function hasDiacritics(value) {
@@ -206,6 +299,7 @@ export function createNamePreprocessor({
         const sampled = sample(raw) || raw;
         const sampledTrimmed = toTrimmedString(sampled);
         const normalized = translate ? stripDiacritics(sampledTrimmed) : sampledTrimmed;
+        const overlapKey = normalizeOverlapKey(sampledTrimmed);
         const lowered = normalized.toLowerCase();
         let canonical = null;
         let method = "raw";
@@ -236,14 +330,44 @@ export function createNamePreprocessor({
         })) {
             applied = true;
             if (fuse) {
+                const allowLooseFuzzyMatch = Boolean(meta?.allowLooseFuzzyMatch);
                 const query = translate ? normalized : stripDiacritics(sampledTrimmed);
                 const results = fuse.search(query);
                 if (Array.isArray(results) && results.length) {
-                    const top = results[0];
-                    if (top?.item && (top.score == null || top.score <= tolerance.maxScore)) {
-                        canonical = top.item;
+                    const selected = results.find((entry) => {
+                        if (!entry?.item) {
+                            return false;
+                        }
+                        if (entry.score != null && entry.score > tolerance.maxScore) {
+                            return false;
+                        }
+                        if (!overlapKey) {
+                            return true;
+                        }
+                        const candidateKey = normalizeOverlapKey(entry.item);
+                        if (!candidateKey) {
+                            return true;
+                        }
+                        const overlapRatio = computeCharacterOverlapRatio(overlapKey, candidateKey);
+                        if (overlapRatio < MIN_FUZZY_CHARACTER_OVERLAP_RATIO) {
+                            return false;
+                        }
+                        if (allowLooseFuzzyMatch) {
+                            return true;
+                        }
+                        const tokenExtendsCandidate = overlapKey.length > candidateKey.length
+                            && overlapKey.length <= candidateKey.length + MAX_FUZZY_AFFIX_OVERHANG
+                            && (overlapKey.startsWith(candidateKey) || overlapKey.endsWith(candidateKey));
+                        if (tokenExtendsCandidate) {
+                            return true;
+                        }
+                        const normalizedEditDistance = computeNormalizedEditDistance(overlapKey, candidateKey);
+                        return normalizedEditDistance <= MAX_NORMALIZED_FUZZY_EDIT_DISTANCE;
+                    });
+                    if (selected?.item) {
+                        canonical = selected.item;
                         method = "fuzzy";
-                        score = typeof top.score === "number" ? top.score : null;
+                        score = typeof selected.score === "number" ? selected.score : null;
                     }
                 }
             }

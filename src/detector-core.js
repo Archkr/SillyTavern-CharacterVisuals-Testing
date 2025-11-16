@@ -424,7 +424,11 @@ function collectFuzzyFallbackMatches({
         if (rangesOverlap(ranges, start, end)) {
             return;
         }
-        const resolution = preprocessName(token.value, { priority: fallbackPriorityValue });
+        const isLowercaseToken = token.value === token.value.toLowerCase();
+        const resolution = preprocessName(token.value, {
+            priority: fallbackPriorityValue,
+            allowLooseFuzzyMatch: allowLowercaseFallbackTokens && isLowercaseToken,
+        });
         if (!resolution || !resolution.canonical || resolution.method !== "fuzzy" || !resolution.changed) {
             return;
         }
@@ -526,7 +530,11 @@ function collectContextualFuzzyFallbackMatches({
             const resolutionPriority = Number.isFinite(context.resolutionPriority)
                 ? context.resolutionPriority
                 : context.priority;
-            const resolution = preprocessName(candidate, { priority: resolutionPriority });
+            const isLowercaseCandidate = candidate === candidate.toLowerCase();
+            const resolution = preprocessName(candidate, {
+                priority: resolutionPriority,
+                allowLooseFuzzyMatch: allowLowercaseFallbackTokens && isLowercaseCandidate,
+            });
             if (!resolution || !resolution.canonical || resolution.method !== "fuzzy" || !resolution.changed) {
                 return;
             }

@@ -107,6 +107,42 @@ test("collectDetections rescues near-miss tokens when fuzzy tolerance active", (
     assert.equal(matches.fuzzyResolution.used, true);
 });
 
+test("collectDetections rescues short names that only differ by one character", () => {
+    const profile = {
+        patternSlots: [
+            { name: "Miku" },
+        ],
+        ignorePatterns: [],
+        attributionVerbs: [],
+        actionVerbs: ["reached"],
+        pronounVocabulary: ["she"],
+        detectAttribution: false,
+        detectAction: true,
+        detectVocative: false,
+        detectPossessive: false,
+        detectPronoun: false,
+        detectGeneral: true,
+        fuzzyTolerance: "auto",
+    };
+
+    const { regexes } = compileProfileRegexes(profile, {
+        unicodeWordPattern: "[\\p{L}\\p{M}]",
+        defaultPronouns: ["she"],
+    });
+
+    const sample = "Miki reached for her staff.";
+    const matches = collectDetections(sample, profile, regexes, {
+        priorityWeights: { action: 1 },
+        unicodeWordPattern: "[\\p{L}\\p{M}]",
+    });
+
+    const rescued = matches.find(entry => entry.rawName === "Miki");
+    assert.ok(rescued, "expected near-miss fallback for short name");
+    assert.equal(rescued.name, "Miku");
+    assert.equal(rescued.nameResolution?.method, "fuzzy");
+    assert.equal(rescued.nameResolution?.canonical, "Miku");
+});
+
 test("collectDetections rescues action cues when general detection disabled", () => {
     const profile = {
         patternSlots: [
@@ -213,6 +249,74 @@ test("collectDetections can opt into lowercase fallback scanning when requested"
     const fallbackMatches = matches.filter(entry => entry.matchKind === "fuzzy-fallback");
     const connectorMatches = fallbackMatches.filter(entry => entry.rawName?.toLowerCase() === "and");
     assert.ok(connectorMatches.length >= 1, "expected lowercase connector when opt-in enabled");
+});
+
+test("collectDetections ignores capitalized words with low character overlap", () => {
+    const profile = {
+        patternSlots: [
+            { name: "Yoshinon" },
+            { name: "Nia" },
+        ],
+        ignorePatterns: [],
+        attributionVerbs: [],
+        actionVerbs: [],
+        pronounVocabulary: ["she"],
+        detectAttribution: false,
+        detectAction: false,
+        detectVocative: false,
+        detectPossessive: false,
+        detectPronoun: false,
+        detectGeneral: true,
+        fuzzyTolerance: "auto",
+    };
+
+    const { regexes } = compileProfileRegexes(profile, {
+        unicodeWordPattern: "[\\p{L}\\p{M}]",
+        defaultPronouns: ["she"],
+    });
+
+    const sample = "Now, at her eye level, the conversation paused.";
+    const matches = collectDetections(sample, profile, regexes, {
+        priorityWeights: { name: 1 },
+    });
+
+    const fallbackMatches = matches.filter(entry => entry.matchKind === "fuzzy-fallback");
+    const nowMatch = fallbackMatches.find(entry => entry.rawName === "Now");
+    assert.equal(nowMatch, undefined, "capitalized adverbs should not fuzzy-match characters");
+});
+
+test("collectDetections ignores misleading brand names when fuzzy tolerance active", () => {
+    const profile = {
+        patternSlots: [
+            { name: "Miku" },
+            { name: "Nia" },
+        ],
+        ignorePatterns: [],
+        attributionVerbs: [],
+        actionVerbs: [],
+        pronounVocabulary: ["she"],
+        detectAttribution: false,
+        detectAction: false,
+        detectVocative: false,
+        detectPossessive: false,
+        detectPronoun: false,
+        detectGeneral: true,
+        fuzzyTolerance: "auto",
+    };
+
+    const { regexes } = compileProfileRegexes(profile, {
+        unicodeWordPattern: "[\\p{L}\\p{M}]",
+        defaultPronouns: ["she"],
+    });
+
+    const sample = "Milky bars lined the shelf while the crew waited.";
+    const matches = collectDetections(sample, profile, regexes, {
+        priorityWeights: { name: 1 },
+    });
+
+    const fallbackMatches = matches.filter(entry => entry.matchKind === "fuzzy-fallback");
+    const milkyMatch = fallbackMatches.find(entry => entry.rawName === "Milky");
+    assert.equal(milkyMatch, undefined, "brand names should not rescue to roster entries");
 });
 
 test("resolveOutfitForMatch reuses fuzzy resolution for mapping lookup", () => {
