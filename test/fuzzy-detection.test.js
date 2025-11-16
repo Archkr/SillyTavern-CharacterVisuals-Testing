@@ -326,6 +326,45 @@ test("collectDetections rescues lowercase speaker cues when fallback scanning is
     assert.equal(shidoFallback.nameResolution?.method, "fuzzy");
 });
 
+test("collectDetections strips possessives before fuzzy fallback matching", () => {
+    const profile = {
+        patternSlots: [
+            { name: "Shido" },
+            { name: "Kotori" },
+            { name: "Reine" },
+            { name: "Nia" },
+        ],
+        ignorePatterns: [],
+        attributionVerbs: [],
+        actionVerbs: [],
+        pronounVocabulary: ["she"],
+        detectAttribution: false,
+        detectAction: false,
+        detectVocative: false,
+        detectPossessive: false,
+        detectPronoun: false,
+        detectGeneral: true,
+        fuzzyTolerance: "auto",
+    };
+
+    const { regexes } = compileProfileRegexes(profile, {
+        unicodeWordPattern: "[\\p{L}]",
+        defaultPronouns: ["she"],
+    });
+
+    const sample = "Sido's stance wavered. Kotory's reply stalled. Rien's monotone held. Nya's gaze softened.";
+    const matches = collectDetections(sample, profile, regexes, {
+        priorityWeights: { name: 1 },
+    });
+
+    const fallbackMatches = matches.filter(entry => entry.matchKind === "fuzzy-fallback");
+    assert.ok(fallbackMatches.some(entry => entry.rawName === "Sido's" && entry.name === "Shido"), "expected possessive token to map to Shido");
+    assert.ok(fallbackMatches.some(entry => entry.rawName === "Kotory's" && entry.name === "Kotori"), "expected possessive token to map to Kotori");
+    assert.ok(fallbackMatches.some(entry => entry.rawName === "Rien's" && entry.name === "Reine"), "expected possessive token to map to Reine");
+    assert.ok(fallbackMatches.some(entry => entry.rawName === "Nya's" && entry.name === "Nia"), "expected possessive token to map to Nia");
+    assert.equal(matches.fuzzyResolution.used, true);
+});
+
 test("collectDetections ignores capitalized words with low character overlap", () => {
     const profile = {
         patternSlots: [
