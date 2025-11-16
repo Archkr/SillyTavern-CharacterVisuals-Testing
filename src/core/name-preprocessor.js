@@ -26,6 +26,15 @@ function normalizeOverlapKey(value) {
         .replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
+function stripPossessiveSuffix(value) {
+    const trimmed = toTrimmedString(value);
+    if (!trimmed) {
+        return "";
+    }
+    const withoutSuffix = trimmed.replace(/(?:['’](?:s)?|s['’])$/u, "");
+    return withoutSuffix ? withoutSuffix : trimmed;
+}
+
 function computeCharacterOverlapRatio(source, target) {
     if (!source || !target) {
         return 0;
@@ -57,7 +66,7 @@ const DEFAULT_TOLERANCE = Object.freeze({
     enabled: false,
     accentSensitive: true,
     lowConfidenceThreshold: null,
-    maxScore: 0.45,
+    maxScore: 0.5,
 });
 
 function clampScore(value) {
@@ -218,10 +227,13 @@ export function createNamePreprocessor({
     aliasMap = null,
 } = {}) {
     const uniqueCandidates = Array.from(new Set(candidates.map(toTrimmedString).filter(Boolean)));
+    const fuzzyThreshold = Number.isFinite(tolerance?.maxScore)
+        ? Math.max(0, Math.min(1, tolerance.maxScore))
+        : DEFAULT_TOLERANCE.maxScore;
     const fuse = uniqueCandidates.length && tolerance.enabled
         ? new Fuse(uniqueCandidates, {
             includeScore: true,
-            threshold: 0.45,
+            threshold: fuzzyThreshold,
             ignoreLocation: true,
             ignoreFieldNorm: true,
             ...fuseOptions,
@@ -250,8 +262,9 @@ export function createNamePreprocessor({
 
         const sampled = sample(raw) || raw;
         const sampledTrimmed = toTrimmedString(sampled);
-        const normalized = translate ? stripDiacritics(sampledTrimmed) : sampledTrimmed;
-        const overlapKey = normalizeOverlapKey(sampledTrimmed);
+        const fuzzable = stripPossessiveSuffix(sampledTrimmed);
+        const normalized = translate ? stripDiacritics(fuzzable) : fuzzable;
+        const overlapKey = normalizeOverlapKey(fuzzable);
         const lowered = normalized.toLowerCase();
         let canonical = null;
         let method = "raw";
@@ -283,7 +296,7 @@ export function createNamePreprocessor({
             applied = true;
             if (fuse) {
                 const allowLooseFuzzyMatch = Boolean(meta?.allowLooseFuzzyMatch);
-                const query = translate ? normalized : stripDiacritics(sampledTrimmed);
+                const query = translate ? normalized : stripDiacritics(fuzzable);
                 const results = fuse.search(query);
                 if (Array.isArray(results) && results.length) {
                     const selected = results.find((entry) => {
