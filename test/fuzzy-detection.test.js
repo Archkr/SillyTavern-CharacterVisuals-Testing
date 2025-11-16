@@ -10,6 +10,11 @@ const {
 } = await import("../src/detector-core.js");
 
 const {
+    createNamePreprocessor,
+    resolveFuzzyTolerance,
+} = await import("../src/core/name-preprocessor.js");
+
+const {
     resolveOutfitForMatch,
     rebuildMappingLookup,
     extensionName,
@@ -67,6 +72,22 @@ test("collectDetections normalizes accented candidates when fuzzy tolerance acti
     assert.equal(renee.resolution?.changed, true);
     assert.ok(matches.fuzzyResolution.aliasCount >= 2);
     assert.equal(matches.fuzzyResolution.mode, "auto");
+});
+
+test("preprocessName applies fuzzy rescues when priority is missing", () => {
+    const tolerance = resolveFuzzyTolerance("auto");
+    const preprocessName = createNamePreprocessor({
+        candidates: ["Kotori", "Reine"],
+        tolerance,
+    });
+
+    const kotoryResolution = preprocessName("Kotory", { priority: null });
+    assert.equal(kotoryResolution.canonical, "Kotori");
+    assert.equal(kotoryResolution.method, "fuzzy");
+
+    const rienResolution = preprocessName("Rien", {});
+    assert.equal(rienResolution.canonical, "Reine");
+    assert.equal(rienResolution.method, "fuzzy");
 });
 
 test("collectDetections rescues near-miss tokens when fuzzy tolerance active", () => {
@@ -363,6 +384,40 @@ test("collectDetections strips possessives before fuzzy fallback matching", () =
     assert.ok(fallbackMatches.some(entry => entry.rawName === "Rien's" && entry.name === "Reine"), "expected possessive token to map to Reine");
     assert.ok(fallbackMatches.some(entry => entry.rawName === "Nya's" && entry.name === "Nia"), "expected possessive token to map to Nia");
     assert.equal(matches.fuzzyResolution.used, true);
+});
+
+test("collectDetections rescues misspelled names when only fuzzy fallback runs", () => {
+    const profile = {
+        patternSlots: [
+            { name: "Kotori" },
+            { name: "Reine" },
+        ],
+        ignorePatterns: [],
+        attributionVerbs: [],
+        actionVerbs: [],
+        pronounVocabulary: ["she"],
+        detectAttribution: false,
+        detectAction: false,
+        detectVocative: false,
+        detectPossessive: false,
+        detectPronoun: false,
+        detectGeneral: false,
+        fuzzyTolerance: "auto",
+    };
+
+    const { regexes } = compileProfileRegexes(profile, {
+        unicodeWordPattern: "[\\p{L}]",
+        defaultPronouns: ["she"],
+    });
+
+    const sample = "Kotory steadied the console while Rien monitored telemetry.";
+    const matches = collectDetections(sample, profile, regexes, {
+        unicodeWordPattern: "[\\p{L}]",
+    });
+
+    const fallbackMatches = matches.filter(entry => entry.matchKind === "fuzzy-fallback");
+    assert.ok(fallbackMatches.some(entry => entry.rawName === "Kotory" && entry.name === "Kotori"), "expected Kotory to map to Kotori via fuzzy fallback");
+    assert.ok(fallbackMatches.some(entry => entry.rawName === "Rien" && entry.name === "Reine"), "expected Rien to map to Reine via fuzzy fallback");
 });
 
 test("collectDetections ignores capitalized words with low character overlap", () => {

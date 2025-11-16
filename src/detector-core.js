@@ -1570,28 +1570,25 @@ export function collectDetections(text, profile = {}, regexes = {}, options = {}
                 resolutionPriority: fallbackPriority,
             });
         }
-        if (fallbackContexts.length) {
-            const contextualFallbacks = collectContextualFuzzyFallbackMatches({
-                text: sourceText,
-                preprocessName,
-                tolerance,
-                candidateInitials,
-                existingMatches: matches,
-                contexts: fallbackContexts,
-                tokenOffsets,
-                quoteRanges,
-                matchOptions,
-                allowLowercaseFallbackTokens,
-                fallbackMaxScore: fallbackScoreLimit,
-                fallbackCooldown: fallbackMatchCooldown,
-            });
-            if (contextualFallbacks.length) {
-                matches.push(...contextualFallbacks);
-            }
-        }
-    }
 
-    if (tolerance?.enabled) {
+        const contextualFallbacks = collectContextualFuzzyFallbackMatches({
+            text: sourceText,
+            preprocessName,
+            tolerance,
+            candidateInitials,
+            existingMatches: matches,
+            contexts: fallbackContexts,
+            tokenOffsets,
+            quoteRanges,
+            matchOptions,
+            allowLowercaseFallbackTokens,
+            fallbackMaxScore: fallbackScoreLimit,
+            fallbackCooldown: fallbackMatchCooldown,
+        });
+        if (contextualFallbacks.length) {
+            matches.push(...contextualFallbacks);
+        }
+
         const fallbackMatches = collectSimpleFuzzyFallbackMatches({
             text: sourceText,
             preprocessName,

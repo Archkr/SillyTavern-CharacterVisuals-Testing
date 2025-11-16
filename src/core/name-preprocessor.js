@@ -188,9 +188,9 @@ function shouldApplyFuzzy(tolerance, { priority = null, hasAccents = false } = {
     if (!tolerance || !tolerance.enabled) {
         return false;
     }
+    const normalizedPriority = Number.isFinite(priority) ? priority : null;
     const lowConfidence = tolerance.lowConfidenceThreshold != null
-        && Number.isFinite(priority)
-        && priority <= tolerance.lowConfidenceThreshold;
+        && (normalizedPriority == null || normalizedPriority <= tolerance.lowConfidenceThreshold);
     const accentTrigger = tolerance.accentSensitive && hasAccents;
     if (tolerance.lowConfidenceThreshold == null && !tolerance.accentSensitive) {
         return true;
