@@ -37,6 +37,9 @@
   an optional `fuzzyFallbackMaxScore`), preventing distant capitalized words from mapping onto live characters.
 - **Top character canonical labels.** Live tester and scene panel leaderboards now always show the normalized character name,
   even when a fuzzy fallback trigger originated from filler words like “Now,” keeping phantom entries out of the rankings.
+- **Fuzzy fallback gating.** Contextual and standalone fuzzy sweeps now run any time fuzzy tolerance is enabled, even when no
+  other detectors report matches or the source priority is missing, so near-miss names such as “Kotory” and “Rien” still resolve
+  cleanly.
 - **Fuzzy fallback rescues.** Near-miss character names such as “Ailce” now trigger the fuzzy fallback scanner even when only speaker/action cues are enabled, and the default tolerance accepts one-letter swaps so low-confidence detections remap to the right character instead of being ignored entirely.
 - **Fuzzy fallback possessives.** Trailing apostrophe possessives are stripped before fuzzy matching so misspellings like “Shido’s” or “Kotory’s” still resolve to the correct characters instead of being skipped.
 - **Fuzzy fallback cooldown.** Contextual and standalone fuzzy collectors now pad prior match ranges and enforce a canonical/token cooldown so repeated mentions stop requeueing detections or spamming tester logs.
