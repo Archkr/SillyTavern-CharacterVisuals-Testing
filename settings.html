@@ -293,7 +293,15 @@
                       <small>Profile or character-specific filters for translations or custom markup.</small>
                     </span>
                   </label>
-                  <small class="cs-helper-text">Global scripts handle safe cleanup for every chat, Preset scripts mirror curated SillyTavern bundles, and Scoped scripts run only when your characters or profiles provide their own filters.</small>
+                  <div class="cs-helper-text">
+                    <p><strong>When to toggle each tier:</strong></p>
+                    <ul>
+                      <li><strong>Global</strong> keeps every chat readable by stripping stray honorifics, punctuation glitches, and streamer transcript noise.</li>
+                      <li><strong>Preset</strong> borrows curated bundles for common RP formats so you do not have to maintain regex rules by hand.</li>
+                      <li><strong>Scoped</strong> activates only when a profile or character ships custom guards (kana → romaji swaps, sci-fi call signs, etc.).</li>
+                    </ul>
+                    <p>The preprocessor runs in live streams before detections score, and the Live Tester simply mirrors what already happened.</p>
+                  </div>
                 </div>
                 <div class="cs-field-group cs-field-group--stacked">
                   <label class="cs-inline-label" for="cs-fuzzy-tolerance">Name Matching</label>
@@ -321,7 +329,17 @@
                       <small>Swap accented/translated characters (Á → A, ゆり → Yuri) before comparing.</small>
                     </span>
                   </label>
-                  <small class="cs-helper-text">Fuzzy tolerance decides when to rescue misspelled or diacritic-heavy names. Auto lets low-confidence detections and accented text borrow fuzzy scoring, Accent-only keeps the guardrails tight, and Low Confidence defers fuzzy matching to weaker hits. Enable accent translation when bilingual logs or diacritics frequently hide character names.</small>
+                  <div class="cs-helper-text">
+                    <p><strong>How each preset behaves:</strong></p>
+                    <ul>
+                      <li><strong>Off</strong> is for debugging or strict chats where names never drift.</li>
+                      <li><strong>Auto/Low Confidence</strong> only attempts rescue when scores sag, keeping confident matches exact.</li>
+                      <li><strong>Accent-only</strong> focuses on translating diacritics so bilingual logs stay aligned.</li>
+                      <li><strong>Always</strong> keeps fast, typo-heavy chats stable by remapping every near miss.</li>
+                      <li><strong>Custom</strong> lets you set the score that must be met before fuzzy fallback triggers.</li>
+                    </ul>
+                    <p>Pair the preset with <strong>Translate Accents</strong> whenever a scene swaps alphabets; the shared buffer feeds both live detections and the tester.</p>
+                  </div>
                 </div>
                 <div class="cs-field-group">
                   <label class="cs-inline-label" for="cs-scene-roster-enable">Scene Awareness</label>

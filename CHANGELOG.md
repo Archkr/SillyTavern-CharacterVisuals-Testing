@@ -23,6 +23,7 @@
 - **Adaptive section sizing.** Remaining scene panel sections now stretch to fill the freed space as soon as any module is hidden, so two-up layouts immediately expand instead of waiting until only a single section remains.
 - **Live log export parity.** Copying the live log now produces a full report with detection summaries, switch analytics, skip reasons, and roster state—matching the fidelity of the live pattern tester output.
 - **Scene panel layout cleanup.** Retired the legacy collapse handle so the crest header and toolbar own panel visibility, keeping the frame tidy without the extra toggle stub.
+- **Regex & fuzzy UX copy.** Settings toggles now spell out real-world use cases for the regex preprocessor tiers and fuzzy tolerance presets, with matching README guidance so new users know why and when to enable them.
 
 ### Fixed
 - **Legacy clone fallback.** Replaced direct `structuredClone` calls with a resilient deep clone helper so Electron builds and browsers without the native API can load Costume Switcher without crashing on startup.
