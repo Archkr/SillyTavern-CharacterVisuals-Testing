@@ -322,6 +322,52 @@ test("collectDetections ignores capitalized words with low character overlap", (
     assert.equal(nowMatch, undefined, "capitalized adverbs should not fuzzy-match characters");
 });
 
+test("collectDetections enforces fuzzy fallback score limits", () => {
+    const profile = {
+        patternSlots: [
+            { name: "Kotori" },
+        ],
+        ignorePatterns: [],
+        attributionVerbs: [],
+        actionVerbs: [],
+        pronounVocabulary: ["she"],
+        detectAttribution: false,
+        detectAction: false,
+        detectVocative: false,
+        detectPossessive: false,
+        detectPronoun: false,
+        detectGeneral: false,
+        fuzzyTolerance: {
+            enabled: true,
+            accentSensitive: true,
+            lowConfidenceThreshold: 2,
+            maxScore: 0.9,
+        },
+        fuzzyFallbackMaxScore: 0.5,
+    };
+
+    const { regexes } = compileProfileRegexes(profile, {
+        unicodeWordPattern: "[\\p{L}]",
+        defaultPronouns: ["she"],
+    });
+
+    const sample = "Kufxk waited nearby. Kotoru turned away.";
+    const matches = collectDetections(sample, profile, regexes, {
+        priorityWeights: { name: 1 },
+        unicodeWordPattern: "[\\p{L}]",
+        fuseOptions: { threshold: 0.9 },
+    });
+
+    const fallbackMatches = matches.filter(entry => entry.matchKind === "fuzzy-fallback");
+    const lowScoreMatch = fallbackMatches.find(entry => entry.rawName === "Kotoru");
+    assert.ok(lowScoreMatch, "expected near-match token to survive fallback");
+    assert.equal(lowScoreMatch.name, "Kotori");
+    assert.ok(lowScoreMatch.nameResolution?.score < 0.5, "expected fuzzy score recorded on resolution");
+
+    const highScoreMatch = fallbackMatches.find(entry => entry.rawName === "Kufxk");
+    assert.equal(highScoreMatch, undefined, "expected distant token to be rejected by score limit");
+});
+
 test("resolveOutfitForMatch reuses fuzzy resolution for mapping lookup", () => {
     const profileDraft = {
         enableOutfits: true,

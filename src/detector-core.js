@@ -380,6 +380,32 @@ function rangesOverlap(existingRanges, start, end) {
     });
 }
 
+function clampScoreLimit(value) {
+    if (value == null) {
+        return null;
+    }
+    const number = Number(value);
+    if (!Number.isFinite(number)) {
+        return null;
+    }
+    if (number <= 0) {
+        return 0;
+    }
+    if (number >= 1) {
+        return 1;
+    }
+    return number;
+}
+
+function resolveFuzzyScoreLimit(tolerance, fallbackMaxScore) {
+    const toleranceLimit = clampScoreLimit(tolerance?.maxScore);
+    const profileLimit = clampScoreLimit(fallbackMaxScore);
+    if (toleranceLimit != null && profileLimit != null) {
+        return Math.min(toleranceLimit, profileLimit);
+    }
+    return toleranceLimit ?? profileLimit;
+}
+
 function collectFuzzyFallbackMatches({
     text,
     preprocessName,
@@ -390,6 +416,7 @@ function collectFuzzyFallbackMatches({
     fallbackPriority,
     tokenOffsets,
     allowLowercaseFallbackTokens,
+    fallbackMaxScore,
 }) {
     if (!text || !preprocessName || !tolerance?.enabled) {
         return [];
@@ -409,6 +436,7 @@ function collectFuzzyFallbackMatches({
             .filter(Boolean)
         : [];
     const fallbackPriorityValue = Number.isFinite(fallbackPriority) ? fallbackPriority : 0;
+    const scoreLimit = resolveFuzzyScoreLimit(tolerance, fallbackMaxScore);
     const tokens = scanNameLikeTokens(text, unicodeWordPattern, { allowLowercaseTokens: allowLowercaseFallbackTokens });
     const fallbackMatches = [];
     tokens.forEach((token) => {
@@ -430,6 +458,13 @@ function collectFuzzyFallbackMatches({
             allowLooseFuzzyMatch: allowLowercaseFallbackTokens && isLowercaseToken,
         });
         if (!resolution || !resolution.canonical || resolution.method !== "fuzzy" || !resolution.changed) {
+            return;
+        }
+        const resolutionScore = typeof resolution.score === "number" ? resolution.score : null;
+        if (resolutionScore == null) {
+            return;
+        }
+        if (scoreLimit != null && resolutionScore > scoreLimit) {
             return;
         }
         const span = tokenOffsets ? computeMatchTokenSpan(tokenOffsets, start, token.length) : null;
@@ -462,6 +497,7 @@ function collectContextualFuzzyFallbackMatches({
     quoteRanges,
     matchOptions,
     allowLowercaseFallbackTokens,
+    fallbackMaxScore,
 }) {
     if (!text || !preprocessName || !tolerance?.enabled) {
         return [];
@@ -484,6 +520,7 @@ function collectContextualFuzzyFallbackMatches({
             })
             .filter(Boolean)
         : [];
+    const scoreLimit = resolveFuzzyScoreLimit(tolerance, fallbackMaxScore);
     const fallbackMatches = [];
 
     const resolveCandidate = (match) => {
@@ -536,6 +573,13 @@ function collectContextualFuzzyFallbackMatches({
                 allowLooseFuzzyMatch: allowLowercaseFallbackTokens && isLowercaseCandidate,
             });
             if (!resolution || !resolution.canonical || resolution.method !== "fuzzy" || !resolution.changed) {
+                return;
+            }
+            const resolutionScore = typeof resolution.score === "number" ? resolution.score : null;
+            if (resolutionScore == null) {
+                return;
+            }
+            if (scoreLimit != null && resolutionScore > scoreLimit) {
                 return;
             }
             const span = tokenOffsets ? computeMatchTokenSpan(tokenOffsets, start, candidate.length) : null;
@@ -1057,6 +1101,10 @@ export function collectDetections(text, profile = {}, regexes = {}, options = {}
     const toleranceSetting = options?.fuzzyTolerance ?? profile?.fuzzyTolerance ?? null;
     const tolerance = resolveFuzzyTolerance(toleranceSetting);
     const translateNames = Boolean(options?.translateFuzzyNames ?? profile?.translateFuzzyNames ?? profile?.translateNames ?? false);
+    const fallbackScoreLimit = clampScoreLimit(options?.fuzzyFallbackMaxScore ?? profile?.fuzzyFallbackMaxScore);
+    const fuseOverrides = options?.fuseOptions && typeof options.fuseOptions === "object"
+        ? options.fuseOptions
+        : null;
     const candidateList = Array.isArray(regexes?.effectivePatterns) ? regexes.effectivePatterns : [];
     const candidateInitials = buildCandidateInitials(candidateList);
     const aliasMap = buildAliasCanonicalMap(profile);
@@ -1065,6 +1113,7 @@ export function collectDetections(text, profile = {}, regexes = {}, options = {}
         tolerance,
         translate: translateNames,
         aliasMap,
+        fuseOptions: fuseOverrides || undefined,
     });
     const fuzzyMode = describeFuzzyModeLabel(toleranceSetting, tolerance);
     matches.fuzzyResolution = {
@@ -1312,6 +1361,7 @@ export function collectDetections(text, profile = {}, regexes = {}, options = {}
                 quoteRanges,
                 matchOptions,
                 allowLowercaseFallbackTokens,
+                fallbackMaxScore: fallbackScoreLimit,
             });
             if (contextualFallbacks.length) {
                 matches.push(...contextualFallbacks);
@@ -1330,6 +1380,7 @@ export function collectDetections(text, profile = {}, regexes = {}, options = {}
             fallbackPriority,
             tokenOffsets,
             allowLowercaseFallbackTokens,
+            fallbackMaxScore: fallbackScoreLimit,
         });
         if (fallbackMatches.length) {
             matches.push(...fallbackMatches);
