@@ -16,6 +16,7 @@
 - **Name matching controls.** The Detection tab now includes fuzzy tolerance presets, a custom low-confidence threshold, and an accent translation toggle so profiles can decide how aggressively diacritics and near-miss names are reconciled.
 
 ### Improved
+- **Live tester preprocessing diagnostics.** The Match Flow panel now itemizes applied regex scripts, shows a fuzzy-tolerance badge, adds normalization notes to detections, and copies the summary data into reports so support can trace preprocessing effects.
 - **Scene control center aurora parity.** The roster headline now inherits the hero gradient and animated starfield from the main header so the command center shares the same nebula finish.
 - **Scene control center polish.** Refined the panel with a live-status banner, quick section navigation chips, richer hover states, and smoother animations to make the roster workspace feel faster and more intentional.
 - **Coverage toggle in the control center.** Coverage suggestions now share the toolbar's quick toggles so the panel can hide or restore vocabulary guidance without opening settings.

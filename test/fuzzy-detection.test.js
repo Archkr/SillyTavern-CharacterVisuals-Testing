@@ -66,6 +66,7 @@ test("collectDetections normalizes accented candidates when fuzzy tolerance acti
     assert.equal(renee.resolution?.canonical, "Renée");
     assert.equal(renee.resolution?.changed, true);
     assert.ok(matches.fuzzyResolution.aliasCount >= 2);
+    assert.equal(matches.fuzzyResolution.mode, "auto");
 });
 
 test("resolveOutfitForMatch reuses fuzzy resolution for mapping lookup", () => {

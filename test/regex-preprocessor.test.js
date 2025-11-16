@@ -60,6 +60,11 @@ test("preprocessor pipelines scripts in collection priority order", () => {
 
     assert.equal(matches.preprocessedText, "Kotori →global →preset →scoped");
     assert.ok(matches.length > 0, "expected a detection after preprocessing");
+    assert.deepEqual(
+        matches.preprocessorScripts.map(entry => entry?.script?.id),
+        ["global", "preset", "scoped"],
+        "expected applied script order to match pipeline",
+    );
 });
 
 test("preprocessor only runs scripts that are allowed", () => {

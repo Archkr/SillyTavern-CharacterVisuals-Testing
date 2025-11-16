@@ -1328,6 +1328,115 @@
     color: var(--text-color);
 }
 
+#costume-switcher-settings.cs-theme .cs-preprocessor-meta {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+#costume-switcher-settings.cs-theme .cs-preprocessor-column {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+#costume-switcher-settings.cs-theme .cs-script-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+#costume-switcher-settings.cs-theme .cs-script-entry {
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.02);
+    padding: 8px 10px;
+    font-size: 0.88rem;
+}
+
+#costume-switcher-settings.cs-theme .cs-script-entry__summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#costume-switcher-settings.cs-theme .cs-script-entry__collection {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+}
+
+#costume-switcher-settings.cs-theme .cs-script-entry__name {
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+#costume-switcher-settings.cs-theme .cs-script-entry__actions {
+    margin-left: auto;
+    display: flex;
+    gap: 6px;
+}
+
+#costume-switcher-settings.cs-theme .cs-script-entry__action {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-color);
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+
+#costume-switcher-settings.cs-theme .cs-script-entry__action:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+#costume-switcher-settings.cs-theme .cs-script-entry__description {
+    display: none;
+    margin-top: 6px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    white-space: pre-wrap;
+}
+
+#costume-switcher-settings.cs-theme .cs-script-entry.is-expanded .cs-script-entry__description {
+    display: block;
+}
+
+#costume-switcher-settings.cs-theme .cs-preprocessor-column--badge {
+    justify-content: flex-start;
+}
+
+#costume-switcher-settings.cs-theme .cs-fuzzy-pill {
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 6px 10px;
+    font-size: 0.85rem;
+    display: inline-flex;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-color);
+}
+
+#costume-switcher-settings.cs-theme .cs-fuzzy-pill.is-active {
+    border-color: var(--green);
+    color: var(--green);
+}
+
+#costume-switcher-settings.cs-theme .cs-detection-note {
+    display: block;
+    font-size: 0.8rem;
+    margin-top: 4px;
+    color: var(--text-muted);
+}
+
 #costume-switcher-settings.cs-theme .cs-tester-list {
   list-style: none;
   margin: 0;
