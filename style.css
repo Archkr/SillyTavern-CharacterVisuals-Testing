@@ -1865,6 +1865,7 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
     overflow-y: auto;
     padding-right: 4px;
     scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
 }
 
 .cs-scene-panel__sections::-webkit-scrollbar {
@@ -1978,6 +1979,18 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
+}
+
+.cs-scene-panel__toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.cs-scene-panel__toolbar-group--toggles {
+    min-width: 0;
+    flex: 1 1 140px;
 }
 
 #cs-scene-panel,
@@ -2764,6 +2777,7 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
     min-height: 0;
     overflow-y: auto;
     padding-right: 4px;
+    -webkit-overflow-scrolling: touch;
 }
 
 .cs-scene-panel__sheet-body::-webkit-scrollbar {
@@ -3069,15 +3083,98 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
         width: min(100%, 92vw);
         inset: auto 4vw 4vw 4vw;
         height: auto;
-        max-height: 70vh;
+        max-height: min(78vh, calc(100vh - (var(--topBarBlockSize, 3.25rem) + 24px)));
+        gap: 0;
     }
 
     .cs-scene-panel__content {
         padding: 16px;
+        gap: 12px;
+    }
+
+    .cs-scene-panel__headline,
+    .cs-scene-panel__title {
+        min-width: 0;
+    }
+
+    .cs-scene-panel__toolbar {
+        width: 100%;
+    }
+
+    .cs-scene-panel__toolbar-group {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .cs-scene-panel__toolbar-group--primary {
+        justify-content: flex-start;
+    }
+
+    .cs-scene-panel__toolbar-group--toggles {
+        justify-content: flex-start;
     }
 
     .cs-scene-panel__summon[data-panel-visible="true"] {
         right: 4vw;
         bottom: 4vw;
+    }
+}
+
+@media (max-width: 720px) {
+    .cs-scene-panel {
+        width: auto;
+        left: 12px;
+        right: 12px;
+        top: calc(var(--topBarBlockSize, 3.25rem) + 10px);
+        bottom: auto;
+        height: auto;
+        max-height: calc(100vh - (var(--topBarBlockSize, 3.25rem) + 24px));
+    }
+
+    .cs-scene-panel__header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .cs-scene-panel__headline,
+    .cs-scene-panel__title {
+        width: 100%;
+    }
+
+    .cs-scene-panel__toolbar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+
+    .cs-scene-panel__toolbar-group {
+        justify-content: flex-start;
+    }
+
+    .cs-scene-panel__toolbar-group--primary {
+        row-gap: 10px;
+    }
+
+    .cs-scene-panel__sections {
+        padding-right: 2px;
+    }
+
+    .cs-scene-panel__content {
+        padding: 14px;
+    }
+
+    .cs-scene-panel__section-actions {
+        flex-wrap: wrap;
+        justify-content: flex-start;
+    }
+
+    .cs-scene-panel__summon {
+        right: max(env(safe-area-inset-right, 12px), 12px);
+        bottom: max(env(safe-area-inset-bottom, 12px), 12px);
+    }
+
+    .cs-scene-panel__summon[data-panel-visible="true"] {
+        right: max(env(safe-area-inset-right, 12px), 12px);
+        bottom: max(env(safe-area-inset-bottom, 12px), 12px);
     }
 }
