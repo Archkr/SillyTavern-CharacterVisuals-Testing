@@ -14,38 +14,42 @@
                 </div>
             </div>
             <div class="cs-scene-panel__toolbar" data-scene-panel="toolbar">
-                <button id="cs-scene-panel-toggle" class="cs-scene-panel__icon-button" type="button" data-scene-panel="toggle-panel" aria-pressed="true" title="Hide scene panel">
-                    <i class="fa-solid fa-eye" aria-hidden="true"></i>
-                    <span class="visually-hidden">Toggle scene panel visibility</span>
-                </button>
-                <button id="cs-scene-panel-toggle-auto-open" class="cs-scene-panel__icon-button" type="button" data-scene-panel="auto-open-results" aria-pressed="true" title="Disable auto-open on new results">
-                    <i class="fa-solid fa-bolt" aria-hidden="true"></i>
-                    <span class="visually-hidden">Toggle auto-open on new results</span>
-                </button>
-                <button id="cs-scene-section-toggle-roster" class="cs-scene-panel__icon-button" type="button" data-scene-panel="toggle-roster" aria-pressed="true" title="Hide roster section">
-                    <i class="fa-solid fa-users" aria-hidden="true"></i>
-                    <span class="visually-hidden">Toggle roster section</span>
-                </button>
-                <button id="cs-scene-section-toggle-active" class="cs-scene-panel__icon-button" type="button" data-scene-panel="toggle-active" aria-pressed="true" title="Hide active characters section">
-                    <i class="fa-solid fa-user-clock" aria-hidden="true"></i>
-                    <span class="visually-hidden">Toggle active characters section</span>
-                </button>
-                <button id="cs-scene-section-toggle-log" class="cs-scene-panel__icon-button" type="button" data-scene-panel="toggle-log" aria-pressed="true" title="Hide live log section">
-                    <i class="fa-solid fa-clipboard-list" aria-hidden="true"></i>
-                    <span class="visually-hidden">Toggle live log section</span>
-                </button>
-                <button id="cs-scene-section-toggle-coverage" class="cs-scene-panel__icon-button" type="button" data-scene-panel="toggle-coverage" aria-pressed="true" title="Hide coverage suggestions section">
-                    <i class="fa-solid fa-language" aria-hidden="true"></i>
-                    <span class="visually-hidden">Toggle coverage suggestions section</span>
-                </button>
-                <button id="cs-scene-refresh" class="cs-scene-panel__icon-button" type="button" data-scene-panel="refresh">
-                    <i class="fa-solid fa-rotate" aria-hidden="true"></i>
-                    <span class="visually-hidden">Refresh roster</span>
-                </button>
-                <label class="cs-scene-panel__toggle" data-scene-panel="auto-pin" for="cs-scene-auto-pin">
-                    <input id="cs-scene-auto-pin" type="checkbox" />
-                    <span>Auto-pin top active</span>
-                </label>
+                <div class="cs-scene-panel__toolbar-group cs-scene-panel__toolbar-group--primary">
+                    <button id="cs-scene-panel-toggle" class="cs-scene-panel__icon-button" type="button" data-scene-panel="toggle-panel" aria-pressed="true" title="Hide scene panel">
+                        <i class="fa-solid fa-eye" aria-hidden="true"></i>
+                        <span class="visually-hidden">Toggle scene panel visibility</span>
+                    </button>
+                    <button id="cs-scene-panel-toggle-auto-open" class="cs-scene-panel__icon-button" type="button" data-scene-panel="auto-open-results" aria-pressed="true" title="Disable auto-open on new results">
+                        <i class="fa-solid fa-bolt" aria-hidden="true"></i>
+                        <span class="visually-hidden">Toggle auto-open on new results</span>
+                    </button>
+                    <button id="cs-scene-section-toggle-roster" class="cs-scene-panel__icon-button" type="button" data-scene-panel="toggle-roster" aria-pressed="true" title="Hide roster section">
+                        <i class="fa-solid fa-users" aria-hidden="true"></i>
+                        <span class="visually-hidden">Toggle roster section</span>
+                    </button>
+                    <button id="cs-scene-section-toggle-active" class="cs-scene-panel__icon-button" type="button" data-scene-panel="toggle-active" aria-pressed="true" title="Hide active characters section">
+                        <i class="fa-solid fa-user-clock" aria-hidden="true"></i>
+                        <span class="visually-hidden">Toggle active characters section</span>
+                    </button>
+                    <button id="cs-scene-section-toggle-log" class="cs-scene-panel__icon-button" type="button" data-scene-panel="toggle-log" aria-pressed="true" title="Hide live log section">
+                        <i class="fa-solid fa-clipboard-list" aria-hidden="true"></i>
+                        <span class="visually-hidden">Toggle live log section</span>
+                    </button>
+                    <button id="cs-scene-section-toggle-coverage" class="cs-scene-panel__icon-button" type="button" data-scene-panel="toggle-coverage" aria-pressed="true" title="Hide coverage suggestions section">
+                        <i class="fa-solid fa-language" aria-hidden="true"></i>
+                        <span class="visually-hidden">Toggle coverage suggestions section</span>
+                    </button>
+                    <button id="cs-scene-refresh" class="cs-scene-panel__icon-button" type="button" data-scene-panel="refresh">
+                        <i class="fa-solid fa-rotate" aria-hidden="true"></i>
+                        <span class="visually-hidden">Refresh roster</span>
+                    </button>
+                </div>
+                <div class="cs-scene-panel__toolbar-group cs-scene-panel__toolbar-group--toggles">
+                    <label class="cs-scene-panel__toggle" data-scene-panel="auto-pin" for="cs-scene-auto-pin">
+                        <input id="cs-scene-auto-pin" type="checkbox" />
+                        <span>Auto-pin top active</span>
+                    </label>
+                </div>
             </div>
         </header>
         <div class="cs-scene-panel__sections" data-scene-panel="sections">
