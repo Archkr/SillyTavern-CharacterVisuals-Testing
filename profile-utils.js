@@ -3,6 +3,10 @@ function safeClone(value) {
         return undefined;
     }
 
+    if (value instanceof RegExp) {
+        return new RegExp(value.source, value.flags || "");
+    }
+
     if (typeof structuredClone === 'function') {
         try {
             return structuredClone(value);
@@ -15,6 +19,9 @@ function safeClone(value) {
         const json = JSON.stringify(value);
         return json === undefined ? undefined : JSON.parse(json);
     } catch (err) {
+        if (value instanceof RegExp) {
+            return new RegExp(value.source, value.flags || "");
+        }
         if (Array.isArray(value)) {
             return value.map((item) => safeClone(item));
         }
@@ -164,6 +171,19 @@ function cloneStringList(source) {
         }
         if (Array.isArray(item)) {
             item.forEach((nested) => {
+                if (nested == null) {
+                    return;
+                }
+                if (nested instanceof RegExp) {
+                    const pattern = nested.source;
+                    const flags = nested.flags || "";
+                    const literal = `/${pattern}/${flags}`;
+                    const trimmed = literal.trim();
+                    if (trimmed) {
+                        result.push(trimmed);
+                    }
+                    return;
+                }
                 if (typeof nested === 'string') {
                     const trimmed = nested.trim();
                     if (trimmed) {
@@ -171,6 +191,16 @@ function cloneStringList(source) {
                     }
                 }
             });
+            return;
+        }
+        if (item instanceof RegExp) {
+            const pattern = item.source;
+            const flags = item.flags || "";
+            const literal = `/${pattern}/${flags}`;
+            const trimmed = literal.trim();
+            if (trimmed) {
+                result.push(trimmed);
+            }
             return;
         }
         if (typeof item === 'string') {

@@ -99,3 +99,30 @@ test("prepareMappingsForSave rescues string outfit entries", () => {
     assert.equal(saved[0].outfits.length, 1);
     assert.deepEqual(saved[0].outfits[0], { folder: "rin/alt", triggers: [], priority: 0 });
 });
+
+test("prepareMappingsForSave preserves regex-based outfit variations", () => {
+    const saved = prepareMappingsForSave([
+        {
+            name: "Kaia",
+            defaultFolder: "kaia/base",
+            outfits: [
+                {
+                    folder: "kaia/winter",
+                    triggers: [/snow/i, "blizzard"],
+                    matchKinds: ["Action"],
+                    awareness: { requiresAny: ["Lena"], excludes: [/Drake/i] },
+                    priority: 3,
+                },
+            ],
+        },
+    ]);
+
+    assert.equal(saved[0].outfits.length, 1);
+    assert.deepEqual(saved[0].outfits[0], {
+        folder: "kaia/winter",
+        triggers: ["/snow/i", "blizzard"],
+        matchKinds: ["action"],
+        awareness: { requiresAny: ["Lena"], excludes: ["/Drake/i"] },
+        priority: 3,
+    });
+});
