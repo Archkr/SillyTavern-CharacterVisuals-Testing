@@ -78,6 +78,7 @@
 - **Narrator/system guard in scene restore.** Scene reconciliation ignores narrator and system posts while selecting the latest assistant result, keeping costumes from resetting when the host inserts metadata messages.
 - **Live log stability.** The live diagnostics panel keeps the prior message data visible until the next stream produces detections, so it no longer flickers "Awaiting detections" while idle.
 - **Live diagnostics retention.** Streaming preserves the full switch history for the active message instead of trimming entries mid-stream, so the log no longer empties before generation ends.
+- **Outfit Lab autosave flush.** Pending outfit slot edits now flush before navigation or refresh, preventing new character cards from reloading as blank after a browser reload.
 - **Scene panel hide toggle.** Hiding the command center now removes the panel entirely so no translucent shell remains on screen.
 - **Scene control center button resilience.** Panel and summon buttons now reset their visual styles within the extension so conflicting theme overrides from other mods can no longer hide or neutralize them.
 - **Scene summon toggle stability.** Restored the summon control's inline visibility guard without the heavy polling loop, preventing slowdowns while keeping the button visible when other mods interfere.
