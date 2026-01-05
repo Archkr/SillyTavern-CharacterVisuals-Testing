@@ -28,6 +28,102 @@ function safeClone(value) {
     }
 }
 
+function normalizeOutfitVariantForSave(rawVariant = {}) {
+    if (rawVariant == null) {
+        return { folder: "", triggers: [] };
+    }
+
+    if (typeof rawVariant === "string") {
+        return { folder: rawVariant.trim(), triggers: [] };
+    }
+
+    const variant = safeClone(rawVariant) || {};
+
+    const folder = typeof variant.folder === "string" ? variant.folder.trim() : "";
+    const slot = typeof variant.slot === "string" ? variant.slot.trim() : "";
+    const name = typeof variant.name === "string" ? variant.name.trim() : "";
+    const label = typeof variant.label === "string" ? variant.label.trim() : (name || slot);
+
+    const triggers = cloneStringList([
+        variant.triggers,
+        variant.patterns,
+        variant.matchers,
+        variant.trigger,
+        variant.matcher,
+    ]);
+
+    const matchKinds = cloneStringList([
+        variant.matchKinds,
+        variant.matchKind,
+        variant.kinds,
+        variant.kind,
+    ]).map(value => value.toLowerCase());
+
+    const awarenessSource = typeof variant.awareness === "object" && variant.awareness !== null
+        ? variant.awareness
+        : {};
+    const awareness = {};
+    const requires = cloneStringList([
+        awarenessSource.requires,
+        awarenessSource.requiresAll,
+        awarenessSource.all,
+        variant.requires,
+        variant.requiresAll,
+        variant.all,
+    ]);
+    if (requires.length) {
+        awareness.requires = requires;
+    }
+    const requiresAny = cloneStringList([
+        awarenessSource.requiresAny,
+        awarenessSource.any,
+        awarenessSource.oneOf,
+        variant.requiresAny,
+        variant.any,
+        variant.oneOf,
+    ]);
+    if (requiresAny.length) {
+        awareness.requiresAny = requiresAny;
+    }
+    const excludes = cloneStringList([
+        awarenessSource.excludes,
+        awarenessSource.absent,
+        awarenessSource.none,
+        awarenessSource.forbid,
+        variant.excludes,
+        variant.absent,
+        variant.none,
+        variant.forbid,
+    ]);
+    if (excludes.length) {
+        awareness.excludes = excludes;
+    }
+
+    const prioritySource = variant.priority ?? variant.order ?? variant.weight ?? 0;
+    const priority = Number(prioritySource);
+
+    const normalized = {
+        folder,
+        triggers,
+        priority: Number.isFinite(priority) ? priority : 0,
+    };
+
+    if (slot) {
+        normalized.slot = slot;
+    }
+    if (label) {
+        normalized.label = label;
+    }
+    if (matchKinds.length) {
+        normalized.matchKinds = [...new Set(matchKinds)];
+    }
+    if (Object.keys(awareness).length) {
+        normalized.awareness = awareness;
+    }
+
+    return normalized;
+}
+
 function cloneOutfits(outfits) {
     if (!Array.isArray(outfits)) {
         return [];
@@ -38,17 +134,17 @@ function cloneOutfits(outfits) {
         if (item == null) {
             return;
         }
-        if (typeof item === 'string') {
+        if (typeof item === "string") {
             const trimmed = item.trim();
             if (trimmed) {
-                result.push(trimmed);
+                result.push({ folder: trimmed, triggers: [] });
             }
             return;
         }
-        if (typeof item === 'object') {
-            const cloned = safeClone(item);
-            if (cloned && typeof cloned === 'object') {
-                result.push(cloned);
+        if (typeof item === "object") {
+            const normalized = normalizeOutfitVariantForSave(item);
+            if (normalized && typeof normalized === "object") {
+                result.push(normalized);
             }
         }
     });
