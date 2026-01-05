@@ -36,6 +36,8 @@
   explicitly opt into lowercase scanning, preventing common words from appearing as phantom characters in tester rankings.
 - **Outfit Lab variation persistence.** Outfit variations added to character slots now survive saves and page reloads instead of
   reappearing as empty cards.
+- **Outfit Lab trigger persistence.** Regex-based outfit triggers and awareness rules are preserved during saves so folders,
+  match kinds, and exclusion lists stay intact after reloading profiles.
 - **Fuzzy fallback overlap guard.** Capitalized filler words must now share at least half of their characters with a real
   pattern slot before fuzzy rescue runs, blocking adverbs like “Now” from being remapped to characters such as Yoshinon.
 - **Fuzzy fallback score cap.** Fallback rescues now require a valid Fuse score that stays under the configured tolerance (or
