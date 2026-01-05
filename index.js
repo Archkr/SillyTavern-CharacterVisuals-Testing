@@ -84,6 +84,7 @@ import {
 } from "./src/ui/scenePanelState.js";
 import { renderScenePanel, createScenePanelRefreshHandler } from "./src/ui/render/panel.js";
 import { formatRelativeTime } from "./src/ui/render/utils.js";
+import { registerAutoSaveGuards } from "./src/ui/autoSaveGuards.js";
 
 const extensionName = "SillyTavern-CostumeSwitch-Testing";
 const extensionTemplateNamespace = `third-party/${extensionName}`;
@@ -556,6 +557,7 @@ const state = {
     },
     draftMappingIds: new Set(),
     draftPatternIds: new Set(),
+    autoSaveCleanup: null,
     focusLockNotice: createFocusLockNotice(),
     patternSearchQuery: "",
     lastSceneSwipeId: null,
@@ -8610,6 +8612,13 @@ function wireUI() {
     $(document).on('click', '#cs-regex-test-copy', copyTesterReport);
     $(document).on('click', '#cs-stats-log', logLastMessageStats);
 
+    if (typeof window !== "undefined") {
+        state.autoSaveCleanup = registerAutoSaveGuards({
+            flushFn: flushScheduledProfileAutoSave,
+            target: window,
+        });
+    }
+
     updateTesterCopyButton();
 
 }
@@ -11518,6 +11527,14 @@ function unload() {
     if (state.integrationHandlers) {
         unregisterSillyTavernIntegration(state.integrationHandlers, { eventSource });
         state.integrationHandlers = null;
+    }
+    if (typeof state.autoSaveCleanup === "function") {
+        try {
+            state.autoSaveCleanup();
+        } catch (err) {
+            console.warn(`${logPrefix} Failed to clean up auto-save guards:`, err);
+        }
+        state.autoSaveCleanup = null;
     }
     resetGlobalState();
 }
