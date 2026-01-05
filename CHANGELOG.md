@@ -34,6 +34,8 @@
 ### Fixed
 - **Fuzzy fallback lowercase guard.** The fallback scanner now ignores lowercase connectors such as “and/but” unless profiles
   explicitly opt into lowercase scanning, preventing common words from appearing as phantom characters in tester rankings.
+- **Outfit Lab variation persistence.** Outfit variations added to character slots now survive saves and page reloads instead of
+  reappearing as empty cards.
 - **Fuzzy fallback overlap guard.** Capitalized filler words must now share at least half of their characters with a real
   pattern slot before fuzzy rescue runs, blocking adverbs like “Now” from being remapped to characters such as Yoshinon.
 - **Fuzzy fallback score cap.** Fallback rescues now require a valid Fuse score that stays under the configured tolerance (or
