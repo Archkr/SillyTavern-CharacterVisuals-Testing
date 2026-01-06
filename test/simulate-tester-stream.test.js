@@ -33,7 +33,6 @@ const baseProfile = {
     failedTriggerCooldownMs: 0,
     maxBufferChars: 24,
     repeatSuppressMs: 0,
-    tokenProcessThreshold: 0,
     mappings: [],
     enableOutfits: false,
     detectAttribution: false,
@@ -272,36 +271,12 @@ test("simulateTesterStream syncs tester events into the shared decision log", ()
         "session tester log should carry the tester message key prefix");
 });
 
-test("simulateTesterStream surfaces a fuzzy idle warning when tolerance is enabled without detections", () => {
-    const profile = setupProfile({
-        detectGeneral: false,
-        detectAttribution: false,
-        detectAction: false,
-        detectPronoun: false,
-        fuzzyTolerance: "auto",
-    });
-    const bufKey = "tester-fuzzy-warning";
-    const msgState = createMessageState(profile);
-    state.perMessageStates = new Map([[bufKey, msgState]]);
-    state.perMessageBuffers = new Map([[bufKey, ""]]);
-
-    const text = "Ambient narration without explicit character cues.";
-    const result = simulateTesterStream(text, profile, bufKey);
-
-    assert.equal(result.events.length, 0, "expected no detection events when all detectors are disabled");
-    const warning = result.rosterWarnings.find(entry => entry?.type === "fuzzy-idle");
-    assert.ok(warning, "fuzzy idle warning should be surfaced when tolerance is enabled but unused");
-    assert.match(warning.message, /detect general name mentions/i, "warning should recommend enabling General Name detection");
-    assert.match(warning.message, /detect attribution and detect action/i, "warning should mention attribution or action verbs for fuzzy context");
-});
-
 test("simulateTesterStream preserves early detections when long replies trim the buffer", () => {
     const profile = setupProfile({
         detectGeneral: true,
         globalCooldownMs: 0,
         repeatSuppressMs: 0,
         maxBufferChars: 48,
-        tokenProcessThreshold: 0,
     });
     const bufKey = "tester-long-window";
     const msgState = createMessageState(profile);

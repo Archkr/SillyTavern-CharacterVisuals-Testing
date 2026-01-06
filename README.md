@@ -4,6 +4,8 @@ Costume Switcher is the companion piece to Lenny’s **Character Expressions** e
 
 Under the hood the extension listens to streaming output from your model, scores every character mention it finds, and immediately updates the displayed costume to match the active speaker. It ships with powerful tooling, scene awareness, and a fully redesigned configuration UI so you can understand *why* a switch happened and tune the behaviour to fit any story.
 
+> **Note:** This testing build removes fuzzy name matching. Detection now relies on direct matches and aliases without the previous fuzzy normalization controls.
+
 > **New to Costume Switcher?** Start here, then hop over to the Character Expressions README. Together they form a best-friends duo: Expressions handles nuanced emotions, Costume Switcher handles wardrobe changes.
 
 ---
@@ -25,7 +27,6 @@ Under the hood the extension listens to streaming output from your model, scores
     4. [Presets & Focus](#presets--focus)
     5. [Detection Strategy](#detection-strategy)
         1. [Regex Preprocessor quick guide](#regex-preprocessor-quick-guide)
-        2. [Fuzzy name matching quick guide](#fuzzy-name-matching-quick-guide)
     6. [Performance & Bias](#performance--bias)
     7. [Outfit Lab](#outfit-lab)
         1. [Prepare your character folders](#1-prepare-your-character-folders)
@@ -187,26 +188,6 @@ That cleaned copy can be shaped by three script collections without editing JSON
 
 For example, a preset script can convert `[Alice - whispers]` into `Alice whispers` so the attribution detector still fires, while a scoped script for `Yūri` can replace accented letters with plain ASCII only when she is on stage. Because the preprocessor runs inside the six-stage pipeline, the cleaned text feeds directly into live `/costume` calls, and the Live Pattern Tester shows the already-scrubbed version so you can confirm your scripts behave as expected.
 
-#### Fuzzy name matching quick guide
-Fuzzy matching is the “don’t panic when the spelling drifts” safety net. After the regex preprocessor finishes, both detection engines share the same normalization buffer. When a detector thinks it found a character but the score is too low (or the text contains heavy diacritics), the fuzzy module compares the detected text against your character list using edit distance. If the distance is within the active tolerance, the detector is upgraded to the closest character, the score is boosted, and the `/costume` call proceeds as if the spelling was perfect.
-
-Choose a preset from **Name Matching → Fuzzy Tolerance** based on how messy your chat usually is:
-
-- **Off** – Use when you are debugging or when the cast names are short, unique, and always typed correctly.
-- **Auto / Low Confidence** – Best everyday mode. The engine only attempts fuzzy rescue when a detector posts a weak score or when it spots accent-heavy text, keeping confident matches strict.
-- **Accent-only** – Ideal for bilingual chats that simply need Á→A or ゆり→Yuri remapping without touching other typos.
-- **Always** – Fast-paced chats with constant misspellings benefit from always-on fuzzy rescue so “Ailce” still maps to Alice mid-stream.
-- **Custom threshold** – Set your own low-confidence score ceiling when you know exactly how aggressive the fallback should be.
-
-To see the difference, paste `"Ailce reached for her staff."` into the Live Pattern Tester. With fuzzy matching off the action detector ignores the typo. Enable **Auto** and the detector rewrites the hit to **Alice** because the edit distance is only one letter, and the score now clears the decision gate. Pair the tolerance with the **Translate Accents** toggle whenever a scene swaps alphabets or diacritics frequently—the shared buffer ensures the extension rescues live detections immediately, while the tester mirrors every fuzzy rescue so you can preview the outcome.
-
-Fine-tune how those rescues behave with the advanced controls under **Name Matching**:
-
-- **Max fuzzy fallback score** – (Optional) Caps Fuse rescue scores between `0` and `1`. Set it around `0.4–0.6` to stop distant capitalized words from remapping to characters when the preset tolerance is already permissive; leave it blank to rely on the preset alone.
-- **Fallback cooldown (characters)** – (Optional) Requires a minimum character gap before the same name can be rescued again. Keep the default 200-character window to dampen repeated spam, or lower it for tight call-and-response transcripts where back-to-back mentions should still resolve.
-
-Need to scan lowercase cues or system prompts (for example, when a preset intentionally lowercases speaker labels)? Flip on **Scan Lowercase Cues** under Name Matching. It re-enables the lowercase sweep for fuzzy fallback rescues so those intentionally lowercased cues can still remap to your cast. Leave it off for normal chats so filler words like “and/but” stay ignored.
-
 ### Performance & Bias
 Fine-tune responsiveness and tie-breaking behaviour:
 - **Global Cooldown (ms)** – Minimum time between any two costume changes.
@@ -214,7 +195,6 @@ Fine-tune responsiveness and tie-breaking behaviour:
 - **Per-Trigger Cooldown (ms)** – Delay before the same detection type (e.g., action) can trigger again.
 - **Failed Trigger Cooldown (ms)** – Backoff applied after a switch attempt is rejected.
 - **Max Buffer Size (chars)** – Hard cap on how much of the recent stream is analysed.
-- **Token Process Threshold (chars)** – Number of characters that must arrive before the buffer is rescored.
 - **Detection Bias** – Slider balancing match priority versus recency; positive numbers favour dialogue/action tags, negative values favour the latest mention.
 
 ### Outfit Lab
