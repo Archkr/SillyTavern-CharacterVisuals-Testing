@@ -31,6 +31,10 @@
 - **Scene panel layout cleanup.** Retired the legacy collapse handle so the crest header and toolbar own panel visibility, keeping the frame tidy without the extra toggle stub.
 - **Regex & fuzzy UX copy.** Settings toggles now spell out real-world use cases for the regex preprocessor tiers and fuzzy tolerance presets, with matching README guidance so new users know why and when to enable them.
 
+### Removed
+- **Fuzzy name matching.** Pulled fuzzy tolerance controls and processing from both the UI and detection pipeline; name resolution now relies on direct patterns and aliases.
+- **Token process threshold.** Removed the frontend control to streamline performance tuning options.
+
 ### Fixed
 - **Fuzzy fallback lowercase guard.** The fallback scanner now ignores lowercase connectors such as “and/but” unless profiles
   explicitly opt into lowercase scanning, preventing common words from appearing as phantom characters in tester rankings.

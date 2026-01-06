@@ -67,7 +67,6 @@ function buildProfile(overrides = {}) {
         failedTriggerCooldownMs: 0,
         maxBufferChars: 128,
         repeatSuppressMs: 0,
-        tokenProcessThreshold: 0,
         mappings: [],
         enableOutfits: false,
         detectAttribution: false,

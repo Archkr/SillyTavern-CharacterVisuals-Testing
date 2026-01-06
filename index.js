@@ -29,7 +29,7 @@ import {
     collectDetections,
 } from "./src/detector-core.js";
 import { collectProfilePreprocessorScripts, applyPreprocessorScripts } from "./src/core/script-preprocessor.js";
-import { createNamePreprocessor, resolveFuzzyTolerance } from "./src/core/name-preprocessor.js";
+import { createNamePreprocessor } from "./src/core/name-preprocessor.js";
 import {
     mergeDetectionsForReport,
     summarizeDetections,
@@ -233,7 +233,6 @@ const AUTO_SAVE_REASON_OVERRIDES = {
     perTriggerCooldownMs: 'per-trigger cooldown',
     failedTriggerCooldownMs: 'failed trigger cooldown',
     maxBufferChars: 'buffer size',
-    tokenProcessThreshold: 'token processing threshold',
     detectionBias: 'detection bias',
     detectAttribution: 'attribution detection',
     detectAction: 'action detection',
@@ -242,10 +241,6 @@ const AUTO_SAVE_REASON_OVERRIDES = {
     detectPronoun: 'pronoun detection',
     detectGeneral: 'general name detection',
     scanLowercaseFallbackTokens: 'lowercase fallback scanning',
-    fuzzyTolerance: 'name matching tolerance',
-    fuzzyFallbackMaxScore: 'fuzzy fallback score cap',
-    fuzzyFallbackCooldown: 'fuzzy fallback cooldown',
-    translateFuzzyNames: 'accent translation',
     scriptCollections: 'regex preprocessor',
     enableOutfits: 'outfit automation',
     attributionVerbs: 'attribution verbs',
@@ -363,7 +358,6 @@ const PROFILE_DEFAULTS = {
     failedTriggerCooldownMs: 10000,
     maxBufferChars: 5000,
     repeatSuppressMs: 800,
-    tokenProcessThreshold: 60,
     mappings: [],
     enableOutfits: true,
     detectAttribution: true,
@@ -380,10 +374,6 @@ const PROFILE_DEFAULTS = {
     detectionBias: 0,
     enableSceneRoster: true,
     sceneRosterTTL: 5,
-    fuzzyTolerance: "off",
-    fuzzyFallbackMaxScore: null,
-    fuzzyFallbackCooldown: null,
-    translateFuzzyNames: false,
     translateNames: false,
     prioritySpeakerWeight: 5,
     priorityAttributionWeight: 4,
@@ -533,7 +523,6 @@ const state = {
     lastTesterReport: null,
     lastPreprocessedText: "",
     lastPreprocessorScripts: [],
-    lastFuzzyResolution: null,
     lastDetectionCount: 0,
     recentDecisionEvents: [],
     lastVetoMatch: null,
@@ -897,7 +886,6 @@ function findAllMatches(combined, options = {}) {
     const profile = getActiveProfile();
     const { compiledRegexes } = state;
     state.lastDetectionCount = 0;
-    state.lastFuzzyResolution = null;
     if (!profile || !combined) {
         return [];
     }
@@ -918,8 +906,6 @@ function findAllMatches(combined, options = {}) {
         priorityWeights: getPriorityWeights(profile),
         lastSubject,
         scanDialogueActions: Boolean(profile.scanDialogueActions),
-        fuzzyTolerance: profile.fuzzyTolerance,
-        translateFuzzyNames: profile.translateFuzzyNames ?? profile.translateNames ?? PROFILE_DEFAULTS.translateFuzzyNames,
     };
 
     if (Number.isFinite(options?.startIndex) && options.startIndex >= 0) {
@@ -948,7 +934,6 @@ function findAllMatches(combined, options = {}) {
         : combined;
     state.lastPreprocessedText = processed;
     state.lastPreprocessorScripts = clonePreprocessorScripts(matches?.preprocessorScripts || []);
-    state.lastFuzzyResolution = cloneFuzzyResolution(matches?.fuzzyResolution);
     state.lastDetectionCount = Array.isArray(matches) ? matches.length : 0;
     return matches;
 }
@@ -3426,14 +3411,12 @@ function resolveOutfitForMatch(rawName, options = {}) {
     const rawInput = typeof options?.rawName === "string" && options.rawName.trim()
         ? options.rawName.trim()
         : rawName;
-    const baseToleranceSetting = options?.fuzzyTolerance ?? profile?.fuzzyTolerance ?? null;
-    const baseTranslate = Boolean(options?.translateFuzzyNames ?? profile?.translateFuzzyNames ?? profile?.translateNames ?? false);
+    const baseTranslate = Boolean(options?.translateNames ?? profile?.translateNames ?? false);
     const candidates = Array.isArray(profile?.mappings)
         ? profile.mappings.map(entry => entry?.name).filter(Boolean)
         : [];
     const basePreprocessor = createNamePreprocessor({
         candidates,
-        tolerance: resolveFuzzyTolerance(baseToleranceSetting),
         translate: baseTranslate,
     });
     let resolution = options?.nameResolution || null;
@@ -3462,14 +3445,10 @@ function resolveOutfitForMatch(rawName, options = {}) {
     }
 
     let mapping = findMappingForName(profile, normalizedName);
-    if (mapping && (mapping.fuzzyTolerance != null || mapping.translateFuzzyNames != null || mapping.translateNames != null)) {
-        const overrideToleranceSetting = mapping.fuzzyTolerance ?? baseToleranceSetting;
-        const overrideTranslate = mapping.translateFuzzyNames != null
-            ? Boolean(mapping.translateFuzzyNames)
-            : (mapping.translateNames != null ? Boolean(mapping.translateNames) : baseTranslate);
+    if (mapping && mapping.translateNames != null) {
+        const overrideTranslate = Boolean(mapping.translateNames);
         const overridePreprocessor = createNamePreprocessor({
             candidates,
-            tolerance: resolveFuzzyTolerance(overrideToleranceSetting),
             translate: overrideTranslate,
         });
         const remapped = overridePreprocessor(rawName, { priority: options?.priority ?? null });
@@ -3478,7 +3457,6 @@ function resolveOutfitForMatch(rawName, options = {}) {
             normalizedName = normalizeCostumeName(canonicalName);
             resolution = {
                 ...remapped,
-                tolerance: resolveFuzzyTolerance(overrideToleranceSetting),
                 translateNames: overrideTranslate,
             };
             const remappedEntry = findMappingForName(profile, normalizedName);
@@ -3947,149 +3925,6 @@ async function issueCostumeForName(name, opts = {}) {
 // ======================================================================
 // UI MANAGEMENT
 // ======================================================================
-const FUZZY_TOLERANCE_PRESETS = new Set(['off', 'auto', 'accent', 'always', 'low', 'custom']);
-const DEFAULT_FUZZY_TOLERANCE_PRESET = PROFILE_DEFAULTS.fuzzyTolerance || 'off';
-
-function interpretFuzzyToleranceSetting(value) {
-    if (typeof value === 'number' && Number.isFinite(value)) {
-        return { preset: 'custom', customValue: Math.max(0, Math.floor(value)) };
-    }
-    if (typeof value === 'string') {
-        const normalized = value.trim().toLowerCase();
-        switch (normalized) {
-            case 'off':
-            case 'disabled':
-                return { preset: 'off', customValue: '' };
-            case 'auto':
-            case 'default':
-                return { preset: 'auto', customValue: '' };
-            case 'accent':
-            case 'accented':
-            case 'accent-only':
-                return { preset: 'accent', customValue: '' };
-            case 'always':
-            case 'on':
-                return { preset: 'always', customValue: '' };
-            case 'low':
-            case 'low-confidence':
-            case 'lowconfidence':
-                return { preset: 'low', customValue: '' };
-            case 'custom':
-                return { preset: 'custom', customValue: '' };
-            default:
-                return { preset: DEFAULT_FUZZY_TOLERANCE_PRESET, customValue: '' };
-        }
-    }
-    if (value && typeof value === 'object') {
-        const resolved = resolveFuzzyTolerance(value);
-        if (!resolved || !resolved.enabled) {
-            return { preset: 'off', customValue: '' };
-        }
-        const accentSensitive = resolved.accentSensitive !== false;
-        const threshold = Number.isFinite(resolved.lowConfidenceThreshold)
-            ? Math.max(0, Math.floor(resolved.lowConfidenceThreshold))
-            : null;
-        if (threshold == null) {
-            return accentSensitive
-                ? { preset: 'accent', customValue: '' }
-                : { preset: 'always', customValue: '' };
-        }
-        if (accentSensitive && threshold === 2) {
-            return { preset: 'auto', customValue: '' };
-        }
-        if (!accentSensitive && threshold === 2) {
-            return { preset: 'low', customValue: '' };
-        }
-        return { preset: 'custom', customValue: threshold };
-    }
-    if (value === true) {
-        return { preset: 'auto', customValue: '' };
-    }
-    return { preset: DEFAULT_FUZZY_TOLERANCE_PRESET, customValue: '' };
-}
-
-function sanitizeCustomFuzzyToleranceValue(rawValue) {
-    if (rawValue == null) {
-        return null;
-    }
-    const normalized = String(rawValue).trim();
-    if (!normalized) {
-        return null;
-    }
-    const parsed = Number(normalized);
-    if (!Number.isFinite(parsed)) {
-        return null;
-    }
-    return Math.max(0, Math.floor(parsed));
-}
-
-function updateFuzzyToleranceCustomVisibility(preset) {
-    const wrapper = document.getElementById('cs-fuzzy-tolerance-custom-wrapper');
-    if (!wrapper) {
-        return;
-    }
-    wrapper.hidden = preset !== 'custom';
-}
-
-function setFuzzyToleranceUI(value) {
-    const { preset, customValue } = interpretFuzzyToleranceSetting(value);
-    const select = document.querySelector('#cs-fuzzy-tolerance');
-    const normalizedPreset = FUZZY_TOLERANCE_PRESETS.has(preset)
-        ? preset
-        : DEFAULT_FUZZY_TOLERANCE_PRESET;
-    if (select) {
-        select.value = normalizedPreset;
-    }
-    const customField = document.querySelector('#cs-fuzzy-tolerance-custom');
-    if (customField) {
-        if (normalizedPreset === 'custom' && customValue !== '' && customValue != null) {
-            customField.value = customValue;
-        } else {
-            customField.value = '';
-        }
-        customField.removeAttribute('aria-invalid');
-    }
-    updateFuzzyToleranceCustomVisibility(select ? select.value : normalizedPreset);
-}
-
-function sanitizeFuzzyToleranceInputField(input) {
-    if (!input) {
-        return;
-    }
-    const sanitized = sanitizeCustomFuzzyToleranceValue(input.value);
-    if (sanitized == null) {
-        if (String(input.value || '').trim()) {
-            input.setAttribute('aria-invalid', 'true');
-        } else {
-            input.removeAttribute('aria-invalid');
-        }
-        return;
-    }
-    input.value = sanitized;
-    input.removeAttribute('aria-invalid');
-}
-
-function readFuzzyToleranceSettingFromUI() {
-    const select = document.querySelector('#cs-fuzzy-tolerance');
-    const preset = select?.value || DEFAULT_FUZZY_TOLERANCE_PRESET;
-    if (preset !== 'custom') {
-        return preset;
-    }
-    const customField = document.querySelector('#cs-fuzzy-tolerance-custom');
-    const sanitized = sanitizeCustomFuzzyToleranceValue(customField?.value);
-    if (sanitized == null) {
-        if (customField && String(customField.value || '').trim()) {
-            customField.setAttribute('aria-invalid', 'true');
-        }
-        return DEFAULT_FUZZY_TOLERANCE_PRESET;
-    }
-    if (customField) {
-        customField.value = sanitized;
-        customField.removeAttribute('aria-invalid');
-    }
-    return sanitized;
-}
-
 const uiMapping = {
     patterns: { selector: '#cs-patterns', type: 'patternEditor' },
     ignorePatterns: { selector: '#cs-ignore-patterns', type: 'textarea' },
@@ -4101,7 +3936,6 @@ const uiMapping = {
     perTriggerCooldownMs: { selector: '#cs-per-trigger-cooldown', type: 'number' },
     failedTriggerCooldownMs: { selector: '#cs-failed-trigger-cooldown', type: 'number' },
     maxBufferChars: { selector: '#cs-max-buffer-chars', type: 'number' },
-    tokenProcessThreshold: { selector: '#cs-token-process-threshold', type: 'number' },
     detectionBias: { selector: '#cs-detection-bias', type: 'range' },
     detectAttribution: { selector: '#cs-detect-attribution', type: 'checkbox' },
     detectAction: { selector: '#cs-detect-action', type: 'checkbox' },
@@ -4111,10 +3945,6 @@ const uiMapping = {
     detectPronoun: { selector: '#cs-detect-pronoun', type: 'checkbox' },
     detectGeneral: { selector: '#cs-detect-general', type: 'checkbox' },
     scanLowercaseFallbackTokens: { selector: '#cs-scan-lowercase-fallback', type: 'checkbox' },
-    fuzzyTolerance: { selector: '#cs-fuzzy-tolerance', type: 'fuzzyTolerance' },
-    fuzzyFallbackMaxScore: { selector: '#cs-fuzzy-fallback-max-score', type: 'optionalNumber' },
-    fuzzyFallbackCooldown: { selector: '#cs-fuzzy-fallback-cooldown', type: 'optionalNumber' },
-    translateFuzzyNames: { selector: '#cs-translate-fuzzy-names', type: 'checkbox' },
     attributionVerbs: { selector: '#cs-attribution-verbs', type: 'csvTextarea' },
     actionVerbs: { selector: '#cs-action-verbs', type: 'csvTextarea' },
     pronounVocabulary: { selector: '#cs-pronoun-vocabulary', type: 'csvTextarea' },
@@ -4293,22 +4123,6 @@ function resolveMaxBufferChars(profile) {
 function resolveNumericSetting(value, fallback) {
     const num = Number(value);
     return Number.isFinite(num) ? num : fallback;
-}
-
-function resolveOptionalScoreLimit(value, fallback = null) {
-    const num = Number(value);
-    if (!Number.isFinite(num)) {
-        return fallback;
-    }
-    return Math.min(1, Math.max(0, num));
-}
-
-function resolveFallbackCooldown(value, fallback = null) {
-    const num = Number(value);
-    if (!Number.isFinite(num)) {
-        return fallback;
-    }
-    return Math.max(0, Math.floor(num));
 }
 
 function populateProfileDropdown() {
@@ -4630,10 +4444,6 @@ function syncProfileFieldsToUI(profile, fields = []) {
     fields.forEach((key) => {
         const mapping = uiMapping[key];
         if (!mapping) return;
-        if (mapping.type === 'fuzzyTolerance') {
-            setFuzzyToleranceUI(getValue(key));
-            return;
-        }
         const field = $(mapping.selector);
         if (!field.length) return;
         const value = getValue(key);
@@ -4663,24 +4473,6 @@ function syncProfileFieldsToUI(profile, fields = []) {
 function getProfileValueForUI(profile, key) {
     if (!profile || typeof profile !== 'object') {
         return PROFILE_DEFAULTS[key];
-    }
-    if (key === 'translateFuzzyNames') {
-        if (profile.translateFuzzyNames != null) {
-            return profile.translateFuzzyNames;
-        }
-        if (profile.translateNames != null) {
-            return profile.translateNames;
-        }
-        return PROFILE_DEFAULTS.translateFuzzyNames;
-    }
-    if (key === 'fuzzyTolerance') {
-        return profile.fuzzyTolerance ?? PROFILE_DEFAULTS.fuzzyTolerance;
-    }
-    if (key === 'fuzzyFallbackMaxScore') {
-        return resolveOptionalScoreLimit(profile?.fuzzyFallbackMaxScore, PROFILE_DEFAULTS.fuzzyFallbackMaxScore);
-    }
-    if (key === 'fuzzyFallbackCooldown') {
-        return resolveFallbackCooldown(profile?.fuzzyFallbackCooldown, PROFILE_DEFAULTS.fuzzyFallbackCooldown);
     }
     return profile[key];
 }
@@ -4730,7 +4522,6 @@ function loadProfile(profileName) {
             case 'textarea': $(selector).val((value || []).join('\n')); break;
             case 'csvTextarea': $(selector).val((value || []).join(', ')); break;
             case 'patternEditor': renderPatternEditor(profile); break;
-            case 'fuzzyTolerance': setFuzzyToleranceUI(value); break;
             case 'optionalNumber': $(selector).val(value ?? ''); break;
             default: $(selector).val(value); break;
         }
@@ -4750,10 +4541,6 @@ function saveCurrentProfileData() {
     for (const key in uiMapping) {
         const { selector, type } = uiMapping[key];
         if (type === 'patternEditor') {
-            continue;
-        }
-        if (type === 'fuzzyTolerance') {
-            profileData[key] = readFuzzyToleranceSettingFromUI();
             continue;
         }
         const field = $(selector);
@@ -4798,14 +4585,6 @@ function saveCurrentProfileData() {
                     break;
                 }
                 const parsed = Number(raw);
-                if (key === 'fuzzyFallbackMaxScore') {
-                    value = resolveOptionalScoreLimit(parsed, PROFILE_DEFAULTS[key] ?? null);
-                    break;
-                }
-                if (key === 'fuzzyFallbackCooldown') {
-                    value = resolveFallbackCooldown(parsed, PROFILE_DEFAULTS[key] ?? null);
-                    break;
-                }
                 value = Number.isFinite(parsed) ? parsed : (PROFILE_DEFAULTS[key] ?? null);
                 break;
             }
@@ -4825,11 +4604,6 @@ function saveCurrentProfileData() {
     const mappingSource = Array.isArray(activeProfile?.mappings) ? activeProfile.mappings : [];
     const draftIds = state?.draftMappingIds instanceof Set ? state.draftMappingIds : new Set();
     profileData.mappings = prepareMappingsForSave(mappingSource, draftIds);
-    if (profileData.translateFuzzyNames == null) {
-        profileData.translateNames = PROFILE_DEFAULTS.translateNames;
-    } else {
-        profileData.translateNames = Boolean(profileData.translateFuzzyNames);
-    }
     return profileData;
 }
 
@@ -6728,28 +6502,6 @@ function clonePreprocessorScripts(scripts = []) {
     }));
 }
 
-function cloneFuzzyResolution(value) {
-    if (!value || typeof value !== "object") {
-        return null;
-    }
-    const tolerance = value.tolerance && typeof value.tolerance === "object"
-        ? { ...value.tolerance }
-        : null;
-    const fallbackMode = tolerance?.enabled
-        ? tolerance.accentSensitive
-            ? "auto"
-            : "always"
-        : "off";
-    return {
-        tolerance,
-        translateNames: Boolean(value.translateNames),
-        candidateCount: Number.isFinite(value.candidateCount) ? value.candidateCount : 0,
-        used: Boolean(value.used),
-        aliasCount: Number.isFinite(value.aliasCount) ? value.aliasCount : 0,
-        mode: typeof value.mode === "string" ? value.mode : fallbackMode,
-    };
-}
-
 function renderTesterScriptList(scriptsInput) {
     const list = $("#cs-preprocessor-script-list");
     if (!list.length) {
@@ -6798,41 +6550,9 @@ function renderTesterScriptList(scriptsInput) {
     });
 }
 
-function renderTesterFuzzySummary(resolution) {
-    const pill = $("#cs-fuzzy-summary");
-    if (!pill.length) {
-        return;
-    }
-    const effective = resolution && typeof resolution === "object" ? resolution : null;
-    if (!effective || !effective.tolerance) {
-        pill.text('Fuzzy: Off');
-        pill.removeClass('is-active');
-        pill.attr('title', 'Fuzzy normalization disabled.');
-        return;
-    }
-    const modeLabel = effective.mode || (effective.tolerance.enabled ? (effective.tolerance.accentSensitive ? 'auto' : 'always') : 'off');
-    const aliasCount = Number.isFinite(effective.aliasCount) ? effective.aliasCount : 0;
-    const candidateCount = Number.isFinite(effective.candidateCount) ? effective.candidateCount : 0;
-    const summaryParts = [
-        `Mode: ${modeLabel}`,
-        `Translate names: ${effective.translateNames ? 'yes' : 'no'}`,
-        `Aliases loaded: ${aliasCount}`,
-        `Candidates tracked: ${candidateCount}`,
-        `Fuzzy used: ${effective.used ? 'yes' : 'no'}`,
-        `Accent sensitive: ${effective.tolerance.accentSensitive ? 'yes' : 'no'}`,
-        `Low-confidence threshold: ${effective.tolerance.lowConfidenceThreshold ?? 'n/a'}`,
-        `Max fuzzy score: ${effective.tolerance.maxScore ?? 'n/a'}`,
-    ];
-    pill.text(`Fuzzy ${modeLabel} • ${effective.used ? 'matched' : 'idle'} • Aliases ${aliasCount}`);
-    pill.attr('title', summaryParts.join('\n'));
-    pill.toggleClass('is-active', Boolean(effective.used));
-}
-
-function renderTesterPreprocessorMeta({ scripts, fuzzy } = {}) {
+function renderTesterPreprocessorMeta({ scripts } = {}) {
     const scriptsToRender = scripts !== undefined ? scripts : state.lastPreprocessorScripts;
     renderTesterScriptList(scriptsToRender);
-    const fuzzySummary = fuzzy !== undefined ? fuzzy : state.lastFuzzyResolution;
-    renderTesterFuzzySummary(fuzzySummary);
 }
 
 function mergeUniqueList(target = [], additions = []) {
@@ -6945,29 +6665,7 @@ function formatTesterReport(report) {
     }
     lines.push('');
 
-    const fuzzySummary = report.fuzzyResolution;
-    const toleranceInfo = fuzzySummary?.tolerance || null;
-    lines.push('Name Normalization:');
-    if (fuzzySummary) {
-        const fallbackMode = toleranceInfo?.enabled
-            ? toleranceInfo.accentSensitive
-                ? 'auto'
-                : 'always'
-            : 'off';
-        lines.push(`  Mode: ${fuzzySummary.mode || fallbackMode}`);
-        lines.push(`  Translate names: ${fuzzySummary.translateNames ? 'yes' : 'no'}`);
-        lines.push(`  Fuzzy used: ${fuzzySummary.used ? 'yes' : 'no'}`);
-        lines.push(`  Aliases loaded: ${fuzzySummary.aliasCount ?? 0}`);
-        lines.push(`  Candidates tracked: ${fuzzySummary.candidateCount ?? 0}`);
-        lines.push(`  Accent sensitive: ${toleranceInfo?.accentSensitive ? 'yes' : 'no'}`);
-        lines.push(`  Low-confidence threshold: ${toleranceInfo?.lowConfidenceThreshold ?? 'n/a'}`);
-        lines.push(`  Max fuzzy score: ${toleranceInfo?.maxScore ?? 'n/a'}`);
-    } else {
-        lines.push('  Mode: off');
-        lines.push('  Fuzzy used: no');
-        lines.push('  Aliases loaded: 0');
-        lines.push('  Candidates tracked: 0');
-    }
+    lines.push('Name Normalization: Not tracked (fuzzy matching removed).');
     lines.push('');
 
     const mergedDetections = mergeDetectionsForReport(report);
@@ -7184,7 +6882,7 @@ function formatTesterReport(report) {
     }
 
     if (report.profileSnapshot) {
-        const summaryKeys = ['globalCooldownMs', 'perTriggerCooldownMs', 'repeatSuppressMs', 'tokenProcessThreshold'];
+        const summaryKeys = ['globalCooldownMs', 'perTriggerCooldownMs', 'repeatSuppressMs'];
         lines.push('');
         lines.push('Key Settings:');
         summaryKeys.forEach(key => {
@@ -7382,8 +7080,6 @@ function simulateTesterStream(combined, profile, bufKey, options = {}) {
     let buffer = "";
     const rosterTimeline = [];
     const rosterWarnings = [];
-    let lastFuzzySnapshot = null;
-    let detectedAnyCandidates = false;
 
     for (let i = 0; i < combined.length; i++) {
         const appended = buffer + combined[i];
@@ -7434,12 +7130,6 @@ function simulateTesterStream(combined, profile, bufKey, options = {}) {
         }
 
         const matches = findAllMatches(detectionBuffer, matchOptions);
-        if (Array.isArray(matches) && matches.length) {
-            detectedAnyCandidates = true;
-        }
-        if (matches?.fuzzyResolution) {
-            lastFuzzySnapshot = cloneFuzzyResolution(matches.fuzzyResolution);
-        }
         const bestMatch = findBestMatch(detectionBuffer, matches, matchOptions);
         if (!bestMatch) {
             flushWindow();
@@ -7623,17 +7313,6 @@ function simulateTesterStream(combined, profile, bufKey, options = {}) {
     }
 
     const finalState = buildSimulationFinalState(msgState);
-    const fuzzySnapshot = lastFuzzySnapshot || cloneFuzzyResolution(state.lastFuzzyResolution);
-    const fuzzyToleranceEnabled = Boolean(fuzzySnapshot?.tolerance?.enabled);
-    const fuzzyCandidates = Number.isFinite(fuzzySnapshot?.candidateCount) ? fuzzySnapshot.candidateCount : 0;
-    const hasInputText = typeof combined === "string" ? Boolean(combined.trim()) : false;
-
-    if (hasInputText && fuzzyToleranceEnabled && !fuzzySnapshot?.used && !detectedAnyCandidates && fuzzyCandidates > 0) {
-        rosterWarnings.push({
-            type: "fuzzy-idle",
-            message: "Fuzzy tolerance is enabled, but no names were normalized. Turn on Detect General Name Mentions or confirm Detect Attribution and Detect Action are enabled so fuzzy matching has candidates.",
-        });
-    }
 
     if (profile.enableSceneRoster && msgState.rosterTurns instanceof Map && msgState.rosterTurns.size > 0) {
         const expiring = [];
@@ -7738,8 +7417,7 @@ function testRegexPattern() {
     updateTesterTopCharactersDisplay(null);
     updateTesterPreprocessedDisplay(null);
     state.lastPreprocessorScripts = [];
-    state.lastFuzzyResolution = null;
-    renderTesterPreprocessorMeta({ scripts: [], fuzzy: null });
+    renderTesterPreprocessorMeta({ scripts: [] });
     $("#cs-test-veto-result").text('N/A').css('color', 'var(--text-color-soft)');
     renderTesterScoreBreakdown(null);
     renderTesterRosterTimeline(null, null);
@@ -7823,7 +7501,6 @@ function testRegexPattern() {
             skipSummary,
             preprocessedText: state.lastPreprocessedText,
             preprocessorScripts: clonePreprocessorScripts(state.lastPreprocessorScripts),
-            fuzzyResolution: cloneFuzzyResolution(state.lastFuzzyResolution),
         };
         updateTesterTopCharactersDisplay([]);
         updateTesterCopyButton();
@@ -7835,8 +7512,7 @@ function testRegexPattern() {
             ? state.lastPreprocessedText
             : combined;
         const scriptSnapshot = clonePreprocessorScripts(state.lastPreprocessorScripts);
-        const fuzzySnapshot = cloneFuzzyResolution(state.lastFuzzyResolution);
-        renderTesterPreprocessorMeta({ scripts: scriptSnapshot, fuzzy: fuzzySnapshot });
+        renderTesterPreprocessorMeta({ scripts: scriptSnapshot });
         updateTesterPreprocessedDisplay(preprocessedSnapshot);
         allDetectionsList.empty();
         if (allMatches.length > 0) {
@@ -7846,11 +7522,7 @@ function testRegexPattern() {
                 let resolutionNote = '';
                 if (m.nameResolution?.changed) {
                     const rawSource = m.nameResolution.raw || m.rawName || m.originalName || m.name;
-                    const methodLabel = m.nameResolution.method === 'fuzzy'
-                        ? m.nameResolution.score != null
-                            ? `fuzzy:${m.nameResolution.score.toFixed(2)}`
-                            : 'fuzzy'
-                        : m.nameResolution.method || 'normalized';
+                    const methodLabel = m.nameResolution.method || 'normalized';
                     const safeRaw = typeof rawSource === 'string' && rawSource.trim()
                         ? rawSource.trim()
                         : 'unknown';
@@ -7894,7 +7566,6 @@ function testRegexPattern() {
         updateTesterTopCharactersDisplay(topCharacters);
         state.lastPreprocessedText = preprocessedSnapshot;
         state.lastPreprocessorScripts = clonePreprocessorScripts(scriptSnapshot);
-        state.lastFuzzyResolution = cloneFuzzyResolution(fuzzySnapshot);
 
         state.lastTesterReport = {
             ...reportBase,
@@ -7925,7 +7596,6 @@ function testRegexPattern() {
             coverage,
             preprocessedText: preprocessedSnapshot,
             preprocessorScripts: clonePreprocessorScripts(scriptSnapshot),
-            fuzzyResolution: cloneFuzzyResolution(fuzzySnapshot),
         };
         updateTesterCopyButton();
     }
@@ -7953,15 +7623,6 @@ function wireUI() {
             $(document).on('input', selector, (event) => handleAutoSaveFieldEvent(event, key));
         }
     });
-    $(document).on('change', '#cs-fuzzy-tolerance', function() {
-        updateFuzzyToleranceCustomVisibility($(this).val());
-    });
-    const fuzzyToleranceCustomHandler = function(event) {
-        sanitizeFuzzyToleranceInputField(event.currentTarget);
-        handleAutoSaveFieldEvent(event, 'fuzzyTolerance');
-    };
-    $(document).on('input', '#cs-fuzzy-tolerance-custom', fuzzyToleranceCustomHandler);
-    $(document).on('change', '#cs-fuzzy-tolerance-custom', fuzzyToleranceCustomHandler);
     $(document).on('change', '.cs-script-collection-toggle', handleScriptCollectionCheckboxChange);
     $(document).on('focusin mouseenter', '[data-change-notice]', function() {
         if (this?.disabled) {
