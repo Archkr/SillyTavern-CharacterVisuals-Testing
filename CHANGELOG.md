@@ -21,6 +21,8 @@
 - **Fuzzy name matching zoning.** Temporarily fenced off the fuzzy controls in settings with a release note so users know the feature will reopen in v3.6.1 once stability work wraps up.
 
 ### Improved
+- **Detection buffer conditioning.** Detection now mirrors the expressions pipeline by substituting macros, stripping markdown clutter, and windowing the freshest 500 characters while keeping trimmed offsets aligned for streaming scans.
+- **Outfit availability filtering.** Character matches without mapped outfits are filtered out before switching, and skip reasons surface in tester logs so missing folders are clear while debugging.
 - **Live tester preprocessing diagnostics.** The Match Flow panel now itemizes applied regex scripts, shows a fuzzy-tolerance badge, adds normalization notes to detections, and copies the summary data into reports so support can trace preprocessing effects.
 - **Scene control center aurora parity.** The roster headline now inherits the hero gradient and animated starfield from the main header so the command center shares the same nebula finish.
 - **Scene control center polish.** Refined the panel with a live-status banner, quick section navigation chips, richer hover states, and smoother animations to make the roster workspace feel faster and more intentional.

@@ -51,6 +51,7 @@ Under the hood the extension listens to streaming output from your model, scores
 ## Highlights at a Glance
 
 - **Narrative-aware detection** – Attribution, action, vocative, possessive, pronoun, and general mention detectors can be mixed to match the format of your prose.
+- **Expression-grade input conditioning** – Streaming buffers are normalized, macro-substituted, stripped of markdown clutter, and windowed to the freshest 500 characters so detections stay aligned with the expressions pipeline.
 - **Custom engine lineage** – The fully bespoke detection stack (currently in its third major revision) fuses streaming analysis with explainable telemetry so you always know why a switch occurred.
 - **Scene roster logic** – Track who is currently in the conversation and favour them during tight scoring races.
 - **Modern profile workflow** – Save, duplicate, rename, and export complete configurations with a couple of clicks.
@@ -87,12 +88,12 @@ To update, return to the Extension Manager and click **Update all** or reinstall
 
 Costume Switcher combines a lightweight UI layer with a purpose-built streaming analysis pipeline so that avatar changes arrive in perfect sync with the narrative. Here is the life of a single message:
 
-1. **Stream listener** – The extension hooks into SillyTavern’s streaming events and keeps a rolling buffer per message. Each incoming token is cleaned up (punctuation, fancy quotes, zero-width characters) and appended without ever blocking the UI.
+1. **Stream listener** – The extension hooks into SillyTavern’s streaming events and keeps a rolling buffer per message. Each incoming token is cleaned up (punctuation, fancy quotes, zero-width characters), substitutes macro parameters when available, trims markdown clutter, and maintains a focused 500-character window so detectors always see the freshest context.
 2. **Profile compiler** – Your active profile is turned into a ready-to-run bundle of regex detectors, verb lists, cooldown rules, roster preferences, and outfit mappings. Switching profiles simply swaps this bundle out.
-3. **Detection pass** – The main engine sweeps the buffer with detectors for speaker tags, attribution verbs, action verbs, vocatives, possessives, pronouns, and optional “general name” matches. It also honours veto phrases and skips ignored characters before any scoring happens.
+3. **Detection pass** – The main engine sweeps the conditioned buffer with detectors for speaker tags, attribution verbs, action verbs, vocatives, possessives, pronouns, and optional “general name” matches. It also honours veto phrases, skips ignored characters, and filters out any character hits that do not have an available outfit mapping so switches never request empty folders.
 4. **Scoring & context** – Every hit is scored using weighted priorities, distance from the end of the message, and the current scene roster. Bias settings and per-detector weights let you favour explicit dialogue tags or lean toward the freshest mention.
 5. **Decision gate** – Cooldowns, repeat suppression, and manual focus locks are enforced in one place. If the candidate passes, the outfit resolver determines the correct folder (including outfit variants) and issues the `/costume` command.
-6. **Telemetry** – The engine records matches, scores, roster membership, and skip reasons. The Live Pattern Tester, slash commands, and exported session data all pull from this shared telemetry, so you see exactly what the engine saw.
+6. **Telemetry** – The engine records matches, scores, roster membership, and skip reasons (including when an outfit mapping is missing). The Live Pattern Tester, slash commands, and exported session data all pull from this shared telemetry, so you see exactly what the engine saw.
 
 Because each stage is isolated, you can tweak detector settings without relearning the UI, and you can reason about switch decisions by following the same order the engine uses internally.
 
