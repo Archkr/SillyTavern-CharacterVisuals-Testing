@@ -241,7 +241,7 @@ SillyTavern/data/default-user/characters/Mythic Frontier/
 ```
 
 - Use folders like `Mythic Frontier/Ranger Elowen/Outfit Lab/Emberwatch Patrol` when pointing variant mappings at prototypes. Promoting a look is as simple as moving its folder up beside the main art and updating the mapping.
-- Each variant inherits the base outfit’s expression manifest. Missing files fall back to whatever PNGs exist in the variant directory; anything absent simply cannot render. Drop at least a `portrait.png` in every folder so fallbacks always have artwork.
+- Each variant inherits the base outfit’s expression manifest. Missing files fall back to whatever PNGs exist in the variant directory; anything absent simply cannot render. Drop at least a `default.png` in every folder so fallbacks always have artwork.
 - Store shared assets (e.g., accessories or props) alongside the variant art if you reference them directly. SillyTavern only serves files that live inside the selected outfit directory.
 
 #### 2. Open the lab in settings
