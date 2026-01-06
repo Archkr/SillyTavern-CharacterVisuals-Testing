@@ -3040,25 +3040,17 @@ function conditionDetectionInput(text, options = {}) {
     const normalized = normalizeStreamText(text);
     const substituted = substituteParamsSafe(normalized);
     const cleaned = substituted.replace(/[*"]/g, "");
-    const leadingTrim = cleaned.length - cleaned.trimStart().length;
-    const withoutLeading = leadingTrim > 0 ? cleaned.trimStart() : cleaned;
     const sampleThreshold = Number.isFinite(options.sampleThreshold) && options.sampleThreshold > 0
         ? Math.floor(options.sampleThreshold)
         : 500;
 
-    if (withoutLeading.length <= sampleThreshold) {
-        return {
-            text: withoutLeading.trimEnd(),
-            trimmedLeading: leadingTrim,
-        };
+    if (cleaned.length <= sampleThreshold) {
+        return { text: cleaned.trim(), trimmedLeading: 0 };
     }
 
-    const windowTrim = withoutLeading.length - sampleThreshold;
-    const sampleWindow = withoutLeading.slice(-sampleThreshold);
-    const windowLeadingTrim = sampleWindow.length - sampleWindow.trimStart().length;
-    const trimmedLeading = leadingTrim + windowTrim + windowLeadingTrim;
+    const trimmedLeading = cleaned.length - sampleThreshold;
     return {
-        text: sampleWindow.trim(),
+        text: cleaned.slice(-sampleThreshold).trim(),
         trimmedLeading,
     };
 }
