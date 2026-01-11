@@ -160,18 +160,13 @@ function restoreScenePanelFromPopup() {
     if (!scenePanelPopupState) {
         return;
     }
-    const { panel, parent, nextSibling, observer, disabledState } = scenePanelPopupState;
+    const { panel, parent, nextSibling, observer } = scenePanelPopupState;
     if (observer) {
         observer.disconnect();
     }
     if (panel) {
         panel.classList.remove("cs-scene-panel--popup");
         panel.removeAttribute("data-cs-popup");
-        if (disabledState === null) {
-            panel.removeAttribute("data-cs-disabled");
-        } else if (disabledState != null) {
-            panel.setAttribute("data-cs-disabled", disabledState);
-        }
         if (parent) {
             if (nextSibling && nextSibling.parentElement === parent) {
                 parent.insertBefore(panel, nextSibling);
@@ -197,10 +192,8 @@ async function openSceneControlCenterPopup() {
     const parent = panel.parentElement;
     const nextSibling = panel.nextElementSibling;
     const dialog = $("<div class=\"cs-scene-panel-popup\" aria-live=\"polite\"></div>");
-    const disabledState = panel.getAttribute("data-cs-disabled");
     panel.classList.add("cs-scene-panel--popup");
     panel.setAttribute("data-cs-popup", "true");
-    panel.setAttribute("data-cs-disabled", "false");
     dialog.append(panel);
     setScenePanelCollapsed(false);
     requestScenePanelRender("popup-open", { immediate: true });
@@ -215,7 +208,6 @@ async function openSceneControlCenterPopup() {
         parent,
         nextSibling,
         observer,
-        disabledState,
     };
     callGenericPopup(dialog, POPUP_TYPE.TEXT, SCENE_CONTROL_POPUP_TITLE, {
         wide: true,
