@@ -168,6 +168,54 @@ test("handleStream logs focus lock status when locked", () => {
     assert.equal(noticeSnapshot.event.matchKind, "focus-lock");
 });
 
+test("handleStream does not treat token text as a role indicator", () => {
+    const settings = extensionSettingsStore[extensionName];
+    const originalProfile = settings.profiles.Default;
+    const originalCompiled = state.compiledRegexes;
+    const originalGenerationKey = state.currentGenerationKey;
+    const originalGenerationRole = state.currentGenerationRole;
+
+    settings.profiles.Default = {
+        patterns: ["Kotori"],
+        detectAttribution: false,
+        detectAction: false,
+        detectGeneral: true,
+        detectPronoun: false,
+        detectVocative: false,
+        detectPossessive: false,
+    };
+
+    const compiled = compileProfileRegexes(settings.profiles.Default);
+    state.compiledRegexes = { ...compiled.regexes, effectivePatterns: compiled.effectivePatterns };
+
+    state.currentGenerationKey = "m42";
+    state.currentGenerationRole = null;
+    state.perMessageStates = new Map();
+    state.perMessageBuffers = new Map();
+    state.messageStats = new Map();
+    state.messageMatches = new Map();
+    state.topSceneRanking = new Map();
+    state.topSceneRankingUpdatedAt = new Map();
+
+    try {
+        handleStream("user");
+        const buffer = state.perMessageBuffers.get("m42") || "";
+        assert.ok(buffer.includes("user"));
+        assert.equal(state.currentGenerationRole, null);
+    } finally {
+        settings.profiles.Default = originalProfile;
+        state.compiledRegexes = originalCompiled;
+        state.currentGenerationKey = originalGenerationKey;
+        state.currentGenerationRole = originalGenerationRole;
+        state.perMessageStates = new Map();
+        state.perMessageBuffers = new Map();
+        state.messageStats = new Map();
+        state.messageMatches = new Map();
+        state.topSceneRanking = new Map();
+        state.topSceneRankingUpdatedAt = new Map();
+    }
+});
+
 test("createMessageState carries roster TTL forward between messages", () => {
     resetSceneState();
     clearLiveTesterOutputs();
