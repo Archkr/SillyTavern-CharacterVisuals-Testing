@@ -1,0 +1,70 @@
+In-Scene World Editor Roadmap
+
+1) Define world data model and serialization contract
+- Establish core entities (scene, layers, props, lights, navigation, triggers, scripts) and relationships.
+- Choose a canonical serialization (e.g., JSON/GLTF extension) that round-trips between editor and runtime.
+- Version the schema and include metadata for dependencies (assets, shaders, scripts).
+
+2) Asset and dependency pipeline
+- Create an asset registry that resolves IDs to on-disk/bundled resources.
+- Support importing external assets (models, textures, audio) with preprocessing (compression, thumbnails, LODs).
+
+3) Editor UX in scene
+- Provide gizmos for translate/rotate/scale, snapping, grid, and bounds visualization.
+- Hierarchy panel (scene graph), inspector (component editing), and asset browser.
+- Modal-less workflows: click-to-place, duplicate, drag-and-drop from assets to scene.
+
+4) Component editing and validation
+- Support editing transforms, materials, lights, physics bodies, navigation, triggers, scripts.
+- Real-time validation and highlighting of invalid states.
+
+5) Undo/redo and history
+- Command-based history capturing object creation, deletion, property changes, hierarchy moves.
+
+6) Import/export of worlds
+- One-click export to packaged bundle (world JSON + assets), and import with validation/migration.
+- Support partial export (selected nodes) and dependency trimming.
+
+7) Runtime/editor parity and play-in-editor
+- Toggle between edit and play mode; ensure components behave identically.
+- Sandbox scripts in play mode to avoid polluting editor state.
+
+8) Performance and scalability
+- Handle large scenes: culling, async asset streaming, LODs, GPU instancing.
+- Profiling overlay for frame time, draw calls, memory.
+
+9) Collaboration and versioning (optional stretch)
+- World diff/merge aware of scene graphs; lockless multi-user editing via CRDT or OT.
+- Checkpointing and restore.
+
+10) QA, testing, and documentation
+- Unit tests for schema, IO, history, and importers; integration tests for editor flows.
+- Author docs and quickstart for creators.
+
+Usability Delivery Plan (make the editor usable)
+- Milestone 1: Minimal viable editor loop (2 weeks)
+  - Implement scene graph persistence (create/open/save) with schema validation and migration.
+  - Ship transform gizmos with snapping, duplicate/delete, and selection highlight.
+  - Provide hierarchy panel + inspector to edit transforms and materials; auto-focus on selection.
+  - Add asset browser with drag-and-drop placement for at least GLTF + images; generate thumbnails.
+  - Keyboard shortcuts: undo/redo, save, duplicate, delete, focus on selection, toggle gizmo mode.
+
+- Milestone 2: Import/export hardening (1 week)
+  - Export package builder that bundles world JSON + referenced assets with hashes.
+  - Import validator with error reporting, missing-asset resolution prompts, and migration hooks.
+  - Round-trip tests for a sample scene to guarantee parity between edit and runtime.
+
+- Milestone 3: Runtime parity + play-in-editor (1 week)
+  - Mode toggle with isolated script sandbox; pause/resume and reset to last saved state.
+  - Visual indicator of play mode and confirmation on unsaved changes before switching.
+  - Basic physics/light behavior parity checks between editor and play mode.
+
+- Milestone 4: User experience polish (1 week)
+  - Scene autosave/recovery, change history scrubber, and inline validation warnings.
+  - Camera navigation presets (orbit/fly), grid snapping options, and measurement rulers.
+  - Context menus for quick actions (align, group/ungroup, replace asset) and prefab support.
+
+- Milestone 5: Quality + release readiness (1 week)
+  - Integration tests for critical workflows (open/edit/export/import/play) in CI.
+  - Performance budget checks (frame time overlay, draw call counter) on sample scenes.
+  - Author quickstart tutorial and shortcut cheatsheet; publish troubleshooting guide.
