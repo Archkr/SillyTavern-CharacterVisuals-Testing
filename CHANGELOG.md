@@ -103,6 +103,7 @@
 - **Scene control center popup rendering.** Opening the popup now forces the panel visible even when the docked panel is hidden, preventing empty modal windows.
 - **Stream start detection resiliency.** Hidden and symbol-keyed SillyTavern events are now recognised when wiring the integration, keeping the side panel aware of streaming starts even when the host app reshuffles its hooks.
 - **Streaming event detection.** The scene panel now tracks SillyTavern's symbol-based generation events, restoring auto-open behaviour and post-stream analytics updates for live messages.
+- **Streaming role detection stability.** Live streams now cache resolved roles and avoid treating token text as role metadata, preventing runaway per-token scans and restoring scene panel detections when assistant outputs include words like “user.”
 - **Character slot persistence.** Pattern cards stay linked to the active profile after auto-saves, so follow-up edits continue to stick instead of silently rolling back.
 - **Scene panel glow overflow.** The aurora backdrop now animates entirely inside the frame and keeps a generous bleed so no hard edges peek through mid-cycle.
 - **Live tester isolation.** Running pattern simulations no longer injects tester roster data or log events into the side panel.

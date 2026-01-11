@@ -631,6 +631,7 @@ const state = {
     topSceneRankingUpdatedAt: new Map(),
     latestTopRanking: { bufKey: null, ranking: [], fullRanking: [], updatedAt: 0 },
     currentGenerationKey: null,
+    currentGenerationRole: null,
     mappingLookup: new Map(),
     messageKeyQueue: [],
     activeScorePresetKey: null,
@@ -10466,6 +10467,7 @@ const handleGenerationStart = (...args) => {
     if (messageRole && messageRole !== "assistant") {
         debugLog(`Skipping generation start for ${messageRole} message.`, args);
         state.currentGenerationKey = null;
+        state.currentGenerationRole = messageRole;
         return;
     }
 
@@ -10536,6 +10538,7 @@ const handleGenerationStart = (...args) => {
     if (locatedRole && locatedRole !== "assistant") {
         debugLog(`Skipping generation start for ${locatedRole} chat message.`, args);
         state.currentGenerationKey = null;
+        state.currentGenerationRole = locatedRole;
         return;
     }
     if (!messageRole && locatedRole) {
@@ -10617,6 +10620,7 @@ const handleGenerationStart = (...args) => {
 
     if (isUserInitiated) {
         debugLog("Skipping generation start for user-authored event.", args);
+        state.currentGenerationRole = "user";
         return;
     }
 
@@ -10640,6 +10644,7 @@ const handleGenerationStart = (...args) => {
     const normalizedKey = normalizeMessageKey(bufKey) || bufKey;
 
     state.currentGenerationKey = normalizedKey;
+    state.currentGenerationRole = messageRole || "assistant";
     debugLog(`Generation started for ${bufKey}, resetting state.`);
     state.focusLockNotice = createFocusLockNotice();
 
@@ -10687,7 +10692,17 @@ const handleStream = (...args) => {
             return;
         }
 
-        const messageRole = resolveMessageRoleFromArgs(args);
+        let messageRole = state.currentGenerationRole;
+        if (!messageRole) {
+            const hasRoleCandidates = Array.isArray(args)
+                && args.some((value) => value && typeof value === "object");
+            if (hasRoleCandidates) {
+                messageRole = resolveMessageRoleFromArgs(args);
+                if (messageRole) {
+                    state.currentGenerationRole = messageRole;
+                }
+            }
+        }
         if (messageRole && messageRole !== "assistant") {
             return;
         }
@@ -10735,8 +10750,10 @@ const handleStream = (...args) => {
 
                     if (locatedRole && locatedRole !== "assistant") {
                         debugLog(`Skipping stream tracking for ${normalizedFallback} due to ${locatedRole} role.`);
+                        state.currentGenerationRole = locatedRole;
                     } else {
                         state.currentGenerationKey = normalizedFallback;
+                        state.currentGenerationRole = locatedRole || "assistant";
                         debugLog(`Adopted ${normalizedFallback} as stream key from token payload.`);
                     }
                 }
@@ -11325,6 +11342,7 @@ const handleMessageRendered = (...args) => {
     if (!finalKey) {
         debugLog('Message rendered without a resolvable key.', args);
         state.currentGenerationKey = null;
+        state.currentGenerationRole = null;
         return;
     }
 
@@ -11339,6 +11357,7 @@ const handleMessageRendered = (...args) => {
     if (renderedMessage?.is_user || isSystemOrNarratorMessage(renderedMessage)) {
         debugLog(`Skipping scene panel sync for non-assistant message ${finalKey}.`);
         state.currentGenerationKey = null;
+        state.currentGenerationRole = null;
         return;
     }
 
@@ -11351,6 +11370,7 @@ const handleMessageRendered = (...args) => {
     if (!renderedMessage && !hasTrackedState) {
         debugLog(`Skipping scene panel sync for ${finalKey}; no tracked generation state found.`, args);
         state.currentGenerationKey = null;
+        state.currentGenerationRole = null;
         return;
     }
 
@@ -11359,6 +11379,7 @@ const handleMessageRendered = (...args) => {
     captureSceneOutcomeForMessage({ key: finalKey, messageId: resolvedId });
     pruneMessageCaches();
     state.currentGenerationKey = null;
+    state.currentGenerationRole = null;
     requestScenePanelRender("message-rendered", { immediate: true });
 };
 
@@ -11395,6 +11416,7 @@ const resetGlobalState = ({ immediateRender = true } = {}) => {
         topSceneRankingUpdatedAt: new Map(),
         latestTopRanking: { bufKey: null, ranking: [], fullRanking: [], updatedAt: Date.now() },
         currentGenerationKey: null,
+        currentGenerationRole: null,
         messageKeyQueue: [],
         draftMappingIds: new Set(),
         draftPatternIds: new Set(),
