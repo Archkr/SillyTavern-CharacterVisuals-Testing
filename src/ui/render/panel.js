@@ -694,10 +694,12 @@ export function renderScenePanel(panelState = {}, { source = "scene" } = {}) {
     if (!container || (typeof container.length === "number" && container.length === 0)) {
         return;
     }
+    const { el: containerElement } = resolveContainer(container);
+    const isPopup = containerElement?.dataset?.csPopup === "true";
 
     const collapsed = Boolean(panelState.collapsed);
     const settings = panelState.settings || {};
-    const enabled = settings.enabled !== false;
+    const enabled = isPopup ? true : settings.enabled !== false;
 
     lastPanelEnabledState = enabled;
     lastPanelCollapsedState = collapsed;
