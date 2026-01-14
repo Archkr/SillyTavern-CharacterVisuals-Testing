@@ -3348,13 +3348,33 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
     /* Reduced height to leave clear space for the Close button at the bottom */
     height: calc(100dvh - var(--topBarBlockSize, 3.25rem) - 86px);
     max-height: calc(100dvh - var(--topBarBlockSize, 3.25rem) - 86px);
-    margin: 0 auto;
+    /* "Up a tiny bit and to the left a little" */
+    margin: 0;
+    margin-left: 8px;
+    /* Slight left bias (centered is 16px) */
+    margin-top: -8px;
+    /* Move up slightly */
     padding-bottom: 16px;
     box-sizing: border-box;
   }
 
   .cs-scene-panel--popup {
     border-radius: 12px;
+  }
+
+  /* Compact auto-pin toggle on mobile */
+  .cs-scene-panel-popup .cs-toggle-row {
+    margin-top: 4px;
+    gap: 4px;
+  }
+
+  .cs-scene-panel-popup .cs-toggle-row__label {
+    font-size: 0.7rem;
+  }
+
+  /* Force hide "Scene Tools" sheet layer if it ever tries to appear in popup mode */
+  .cs-scene-panel-popup #cs-scene-panel-layer {
+    display: none !important;
   }
 }
 
