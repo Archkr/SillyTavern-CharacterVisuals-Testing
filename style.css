@@ -3198,13 +3198,14 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
 
 @media (max-width: 720px) {
   .cs-scene-panel-popup {
-    /* Override to proper centered, non-overflowing dimensions */
-    width: 92vw !important;
-    max-width: 92vw !important;
+    /* ST-Help pattern: calc(100dvw - 2em) prevents overflow */
+    width: calc(100dvw - 2em) !important;
+    max-width: calc(100dvw - 2em) !important;
     height: calc(100dvh - var(--topBarBlockSize, 3.25rem) - 90px) !important;
     max-height: calc(100dvh - var(--topBarBlockSize, 3.25rem) - 90px) !important;
     margin: 0 auto !important;
-    left: 0 !important;
+    position: static !important;
+    left: auto !important;
   }
 
   .cs-scene-panel {
@@ -3345,26 +3346,37 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
     max-height: min(44vh, 320px);
   }
 
-  /* Mobile-specific popup overrides */
+  /* Mobile-specific popup overrides - following ST-Help-release patterns */
   .cs-scene-panel-popup {
-    /* Safe width to prevent overflow */
-    width: 94vw;
-    max-width: 94vw;
-    /* Reduced height to leave clear space for the Close button at the bottom */
-    height: calc(100dvh - var(--topBarBlockSize, 3.25rem) - 86px);
-    max-height: calc(100dvh - var(--topBarBlockSize, 3.25rem) - 86px);
-    /* Center properly without pushing off-screen */
-    margin: 8px auto 0 auto;
-    padding-bottom: 16px;
-    box-sizing: border-box;
-    /* Slight shift up/left to match user preference without overflow */
-    position: relative;
-    left: -4px;
-    top: -8px;
+    /* Use ST-Help pattern: 100dvw - 2em ensures content never exceeds viewport */
+    width: calc(100dvw - 2em) !important;
+    max-width: calc(100dvw - 2em) !important;
+    /* Reduced height to leave space for Close button */
+    height: calc(100dvh - var(--topBarBlockSize, 3.25rem) - 90px) !important;
+    max-height: calc(100dvh - var(--topBarBlockSize, 3.25rem) - 90px) !important;
+    /* Simple centering - no position offsets */
+    margin: 0 auto !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    /* Reset any position offsets that could cause overflow */
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
   }
 
   .cs-scene-panel--popup {
     border-radius: 12px;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  .cs-scene-panel--popup .cs-scene-panel__content {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    box-sizing: border-box !important;
   }
 
   /* Aggressively compact auto-pin toggle on mobile */
@@ -3437,15 +3449,4 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
   cursor: pointer;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
   transition: all 0.2s ease;
-}
-
-.popup:has(.cs-scene-panel-popup) .popup-button-ok:hover {
-  background: linear-gradient(135deg, rgba(108, 92, 231, 0.95), rgba(72, 134, 216, 0.85));
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
-}
-
-/* Hide text label on Show/Hide Scene Panel button - icon only */
-.cs-scene-panel__summon-label {
-  display: none;
 }
