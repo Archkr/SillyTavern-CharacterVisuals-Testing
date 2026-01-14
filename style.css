@@ -3446,45 +3446,14 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
 }
 
 /* Close button for Scene Control Center popup */
-.popup:has(.cs-scene-panel-popup) .popup-button-close {
-  position: absolute;
-  top: auto;
-  /* Unset top */
-  bottom: -50px;
-  /* Move to BOTTOM of popup */
-  left: 50%;
-  right: auto;
-  transform: translateX(-50%);
-  /* Center horizontally */
-
-  width: 42px;
-  /* Keypad friendly size */
-  height: 42px;
-  font-size: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 50%;
-  color: #fff;
-  cursor: pointer;
-  z-index: 1000;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-}
-
-.popup:has(.cs-scene-panel-popup) .popup-button-close:hover {
-  background: rgba(255, 255, 255, 0.2);
-  transform: translateX(-50%) scale(1.1);
-}
-
-/* Style the OK/Close button at bottom of popup */
+/* OK button (acting as Close) for Scene Control Center popup */
 .popup:has(.cs-scene-panel-popup) .popup-controls {
-  position: absolute;
-  bottom: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 100;
+  /* Positioning context for button */
+  position: static !important;
+  margin-top: 16px !important;
+  width: 100%;
+  display: flex;
+  justify-content: center;
 }
 
 .popup:has(.cs-scene-panel-popup) .popup-button-ok {
@@ -3492,16 +3461,21 @@ body[data-theme="moonlit-echoes"] #costume-switcher-settings.cs-theme .cs-build-
   font-size: 0.95rem;
   font-weight: 600;
   border-radius: 999px;
-  background: linear-gradient(135deg, rgba(108, 92, 231, 0.8), rgba(72, 134, 216, 0.7));
+
+  /* Fix Gradient: Use !important to override theme extensions */
+  background: linear-gradient(135deg, rgba(108, 92, 231, 0.8), rgba(72, 134, 216, 0.7)) !important;
   border: 1px solid rgba(255, 255, 255, 0.2);
   color: rgba(255, 255, 255, 0.95);
   cursor: pointer;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
   transition: all 0.2s ease;
+
+  /* Reset auto margins if any */
+  margin: 0 auto;
 }
 
 .popup:has(.cs-scene-panel-popup) .popup-button-ok:hover {
-  background: linear-gradient(135deg, rgba(108, 92, 231, 0.95), rgba(72, 134, 216, 0.85));
+  background: linear-gradient(135deg, rgba(108, 92, 231, 0.95), rgba(72, 134, 216, 0.85)) !important;
   transform: translateY(-2px);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
 }
