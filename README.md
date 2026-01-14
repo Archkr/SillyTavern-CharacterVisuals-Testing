@@ -4,8 +4,6 @@ Costume Switcher is the companion piece to Lenny’s **Character Expressions** e
 
 Under the hood the extension listens to streaming output from your model, scores every character mention it finds, and immediately updates the displayed costume to match the active speaker. It ships with powerful tooling, scene awareness, and a fully redesigned configuration UI so you can understand *why* a switch happened and tune the behaviour to fit any story.
 
-> **Note:** This testing build removes fuzzy name matching. Detection now relies on direct matches and aliases without the previous fuzzy normalization controls.
-
 > **New to Costume Switcher?** Start here, then hop over to the Character Expressions README. Together they form a best-friends duo: Expressions handles nuanced emotions, Costume Switcher handles wardrobe changes.
 
 ---
